@@ -1,0 +1,22 @@
+{
+  "overview": "An interactive two-player chess game with a visual 8x8 board, full move validation, check/checkmate/stalemate detection, algebraic notation move history, pawn promotion, castling, en passant, and game controls like resign, draw offer, and undo.",
+  "features": [
+    "Visual 8x8 chessboard with coordinate labels",
+    "All legal chess moves enforced including en passant and castling",
+    "Check, checkmate, and stalemate detection",
+    "Pawn promotion modal",
+    "Algebraic notation move history panel",
+    "Captured pieces display",
+    "Resign, draw offer, claim draw, and undo controls",
+    "New game reset"
+  ],
+  "category": "games",
+  "tags": [
+    "chess",
+    "board-game",
+    "two-player",
+    "strategy",
+    "interactive"
+  ],
+  "last_updated": "2026-04-07T21:50:37.625Z"
+}

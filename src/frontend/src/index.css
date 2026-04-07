@@ -1,0 +1,242 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-display: "Space Grotesk", sans-serif;
+    --font-body: "DM Sans", sans-serif;
+    --font-mono: ui-monospace, "Cascadia Code", monospace;
+    --radius: 0.25rem;
+
+    --background: 0.97 0.01 56;
+    --foreground: 0.18 0.02 265;
+    --card: 1.0 0 0;
+    --card-foreground: 0.15 0.01 260;
+    --popover: 1.0 0 0;
+    --popover-foreground: 0.15 0.01 260;
+
+    --primary: 0.45 0.15 120;
+    --primary-foreground: 0.98 0 0;
+
+    --secondary: 0.88 0.12 45;
+    --secondary-foreground: 0.2 0.01 265;
+    --muted: 0.92 0.01 260;
+    --muted-foreground: 0.5 0.01 260;
+
+    --accent: 0.62 0.25 55;
+    --accent-foreground: 0.98 0 0;
+
+    --destructive: 0.55 0.22 25;
+    --destructive-foreground: 0.98 0 0;
+
+    --border: 0.88 0.01 260;
+    --input: 0.88 0.01 260;
+    --ring: 0.45 0.15 120;
+
+    --chart-1: 0.65 0.22 40;
+    --chart-2: 0.6 0.12 185;
+    --chart-3: 0.4 0.07 227;
+    --chart-4: 0.83 0.19 84;
+    --chart-5: 0.77 0.19 70;
+
+    --sidebar: 0.95 0.01 260;
+    --sidebar-foreground: 0.2 0.01 265;
+    --sidebar-primary: 0.45 0.15 120;
+    --sidebar-primary-foreground: 0.98 0 0;
+    --sidebar-accent: 0.88 0.12 45;
+    --sidebar-accent-foreground: 0.2 0.01 265;
+    --sidebar-border: 0.88 0.01 260;
+    --sidebar-ring: 0.45 0.15 120;
+
+    /* Chess board colors */
+    --board-light: oklch(0.86 0.1 55);
+    --board-dark: oklch(0.38 0.06 180);
+    --board-selected: oklch(0.72 0.2 55 / 0.75);
+    --board-legal: oklch(0.72 0.18 120 / 0.45);
+    --board-last-move: oklch(0.65 0.15 55 / 0.4);
+    --board-check: oklch(0.62 0.22 22 / 0.65);
+  }
+
+  .dark {
+    --background: 0.11 0.01 265;
+    --foreground: 0.96 0.01 56;
+    --card: 0.15 0.015 265;
+    --card-foreground: 0.96 0.01 56;
+    --popover: 0.18 0.01 265;
+    --popover-foreground: 0.96 0.01 56;
+
+    --primary: 0.72 0.18 120;
+    --primary-foreground: 0.12 0.01 265;
+
+    --secondary: 0.65 0.15 55;
+    --secondary-foreground: 0.92 0.01 56;
+    --muted: 0.19 0.01 265;
+    --muted-foreground: 0.62 0.01 56;
+
+    --accent: 0.72 0.2 55;
+    --accent-foreground: 0.12 0.01 265;
+
+    --destructive: 0.65 0.19 22;
+    --destructive-foreground: 0.12 0.01 265;
+
+    --border: 0.23 0.01 265;
+    --input: 0.23 0.01 265;
+    --ring: 0.72 0.18 120;
+
+    --chart-1: 0.49 0.24 264;
+    --chart-2: 0.7 0.17 162;
+    --chart-3: 0.77 0.19 70;
+    --chart-4: 0.63 0.27 304;
+    --chart-5: 0.65 0.25 16;
+
+    --sidebar: 0.15 0.01 265;
+    --sidebar-foreground: 0.96 0.01 56;
+    --sidebar-primary: 0.72 0.18 120;
+    --sidebar-primary-foreground: 0.12 0.01 265;
+    --sidebar-accent: 0.65 0.15 55;
+    --sidebar-accent-foreground: 0.92 0.01 56;
+    --sidebar-border: 0.23 0.01 265;
+    --sidebar-ring: 0.72 0.18 120;
+
+    /* Chess board colors — dark mode richer tones */
+    --board-light: oklch(0.82 0.09 60);
+    --board-dark: oklch(0.32 0.06 200);
+    --board-selected: oklch(0.72 0.22 55 / 0.8);
+    --board-legal: oklch(0.72 0.18 120 / 0.5);
+    --board-last-move: oklch(0.68 0.15 55 / 0.4);
+    --board-check: oklch(0.65 0.22 22 / 0.7);
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-background text-foreground font-body antialiased;
+  }
+}
+
+@font-face {
+  font-family: "Space Grotesk";
+  src: url("/assets/fonts/SpaceGrotesk.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "DM Sans";
+  src: url("/assets/fonts/DMSans.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@layer utilities {
+  .transition-smooth {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  .font-body {
+    font-family: var(--font-body);
+  }
+
+  /* Chess board squares */
+  .board-square-light {
+    background-color: var(--board-light);
+  }
+
+  .board-square-dark {
+    background-color: var(--board-dark);
+  }
+
+  .board-square-selected {
+    background-color: var(--board-selected) !important;
+  }
+
+  .board-square-legal {
+    position: relative;
+  }
+
+  .board-square-legal::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    width: 33%;
+    height: 33%;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: var(--board-legal);
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  .board-square-legal-capture {
+    box-shadow: inset 0 0 0 4px var(--board-legal);
+  }
+
+  .board-square-last-move {
+    background-color: var(--board-last-move) !important;
+    mix-blend-mode: overlay;
+  }
+
+  .board-square-check {
+    background-color: var(--board-check) !important;
+  }
+
+  /* Piece styles */
+  .piece-white {
+    color: oklch(0.97 0.02 60);
+    text-shadow: 0 1px 3px oklch(0.1 0.01 265 / 0.8);
+  }
+
+  .piece-black {
+    color: oklch(0.15 0.02 265);
+    text-shadow: 0 1px 2px oklch(0.1 0.01 265 / 0.5);
+  }
+
+  /* Game status badge */
+  .game-status {
+    @apply font-display font-bold text-lg tracking-tight;
+  }
+
+  /* Turn indicator pulse */
+  .turn-indicator {
+    animation: turn-pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes turn-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.6;
+    }
+  }
+
+  /* Subtle glow for active clocks */
+  .clock-active {
+    box-shadow: 0 0 0 1px oklch(0.72 0.18 120 / 0.5), 0 0 12px
+      oklch(0.72 0.18 120 / 0.15);
+  }
+
+  .shadow-subtle {
+    box-shadow: 0 1px 3px oklch(0 0 0 / 0.3), 0 1px 2px oklch(0 0 0 / 0.2);
+  }
+
+  .shadow-board {
+    box-shadow: 0 8px 32px oklch(0 0 0 / 0.6), 0 2px 8px oklch(0 0 0 / 0.4);
+  }
+}
