@@ -18,7 +18,7 @@ export function Layout({
   controls,
 }: LayoutProps) {
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen flex flex-col">
       {/* Header */}
       <header className="bg-card border-b border-border shadow-subtle flex-shrink-0">
         {header}
@@ -32,7 +32,7 @@ export function Layout({
         </aside>
 
         {/* Board — center */}
-        <div className="flex-1 flex items-center justify-center bg-background p-4 lg:p-6 order-1 lg:order-2 min-w-0">
+        <div className="flex-1 flex items-center justify-center p-4 lg:p-6 order-1 lg:order-2 min-w-0">
           {board}
         </div>
 
@@ -121,6 +121,12 @@ export function StatusBadge({ status, currentTurn, winner }: StatusBadgeProps) {
       case "resigned":
         return {
           label: `${winner} wins by resignation`,
+          color: "bg-primary/20 text-primary border border-primary/40",
+          dot: "bg-primary",
+        };
+      case "timeout":
+        return {
+          label: `${winner} wins on time!`,
           color: "bg-primary/20 text-primary border border-primary/40",
           dot: "bg-primary",
         };

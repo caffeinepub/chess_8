@@ -1,22 +1,30 @@
 {
-  "overview": "An interactive two-player chess game with a visual 8x8 board, full move validation, check/checkmate/stalemate detection, algebraic notation move history, pawn promotion, castling, en passant, and game controls like resign, draw offer, and undo.",
+  "overview": "A fully-featured web chess game with a built-in AI engine opponent. Play against a friend or challenge the computer at 5 difficulty levels. Features complete chess rules, multiple board themes, timed games, player names, win tracking, and more.",
   "features": [
-    "Visual 8x8 chessboard with coordinate labels",
-    "All legal chess moves enforced including en passant and castling",
-    "Check, checkmate, and stalemate detection",
-    "Pawn promotion modal",
-    "Algebraic notation move history panel",
-    "Captured pieces display",
-    "Resign, draw offer, claim draw, and undo controls",
-    "New game reset"
+    "Two-player and vs-engine opponent modes",
+    "Chess engine with 5 difficulty levels (minimax + alpha-beta pruning)",
+    "Engine thinking indicator during AI move calculation",
+    "Full chess rules: castling, en passant, pawn promotion, check/checkmate/stalemate",
+    "5 board color themes with live switching",
+    "Game duration selector (3, 5, 10 min or Unlimited)",
+    "Countdown clock with end-of-game alert (flash + sound)",
+    "Player name entry with persistence",
+    "Win counter (wins only, no draw points)",
+    "Background color picker (default light grey)",
+    "Scrollable move history in algebraic notation",
+    "Captured pieces display with material advantage",
+    "Undo, Resign, Offer Draw, Claim Draw controls",
+    "All settings persist across page reloads"
   ],
   "category": "games",
   "tags": [
     "chess",
     "board-game",
+    "ai-engine",
     "two-player",
     "strategy",
-    "interactive"
+    "minimax",
+    "alpha-beta-pruning"
   ],
-  "last_updated": "2026-04-07T21:50:37.625Z"
+  "last_updated": "2026-04-08T00:17:21.056Z"
 }

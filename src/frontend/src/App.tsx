@@ -10,19 +10,209 @@ import { Crown, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
 import { Layout, StatusBadge } from "./Layout";
+import {
+  DurationSelector,
+  useGameDuration,
+} from "./components/DurationSelector";
+import type { GameDuration } from "./components/DurationSelector";
+import { EngineThinking } from "./components/EngineThinking";
 import { GameControls } from "./components/GameControls";
 import { MoveHistory } from "./components/MoveHistory";
+import {
+  OpponentSelector,
+  useOpponentMode,
+} from "./components/OpponentSelector";
+import { PlayerNameInput } from "./components/PlayerNameInput";
+import { ThemeSelector, useChessTheme } from "./components/ThemeSelector";
 import {
   applyMove,
   createInitialGameState,
   getLegalMoves,
   getPieceSymbol,
 } from "./lib/chess";
+import { getBestMove } from "./lib/chessEngine";
 import type { GameState, PieceColor, PieceType, Position } from "./types/chess";
+
+// ─── Player Names ─────────────────────────────────────────────────────────────
+
+const NAMES_STORAGE_KEY = "chess-player-names";
+
+function usePlayerNames() {
+  const [whitePlayerName, setWhitePlayerName] = useState<string>(() => {
+    try {
+      const stored = localStorage.getItem(NAMES_STORAGE_KEY);
+      if (stored)
+        return (
+          (JSON.parse(stored) as { white: string; black: string }).white ||
+          "Player White"
+        );
+    } catch {}
+    return "Player White";
+  });
+  const [blackPlayerName, setBlackPlayerName] = useState<string>(() => {
+    try {
+      const stored = localStorage.getItem(NAMES_STORAGE_KEY);
+      if (stored)
+        return (
+          (JSON.parse(stored) as { white: string; black: string }).black ||
+          "Player Black"
+        );
+    } catch {}
+    return "Player Black";
+  });
+
+  useEffect(() => {
+    localStorage.setItem(
+      NAMES_STORAGE_KEY,
+      JSON.stringify({ white: whitePlayerName, black: blackPlayerName }),
+    );
+  }, [whitePlayerName, blackPlayerName]);
+
+  return {
+    whitePlayerName,
+    blackPlayerName,
+    setWhitePlayerName,
+    setBlackPlayerName,
+  };
+}
+
+// ─── Win Counters ─────────────────────────────────────────────────────────────
+
+const WIN_COUNTERS_KEY = "chess-win-counters";
+
+interface WinCounters {
+  white: number;
+  black: number;
+}
+
+function useWinCounters() {
+  const [counters, setCounters] = useState<WinCounters>(() => {
+    try {
+      const stored = localStorage.getItem(WIN_COUNTERS_KEY);
+      if (stored) return JSON.parse(stored) as WinCounters;
+    } catch {}
+    return { white: 0, black: 0 };
+  });
+
+  useEffect(() => {
+    localStorage.setItem(WIN_COUNTERS_KEY, JSON.stringify(counters));
+  }, [counters]);
+
+  const incrementWinner = useCallback((winner: PieceColor) => {
+    setCounters((prev) => ({
+      ...prev,
+      white: winner === "White" ? prev.white + 1 : prev.white,
+      black: winner === "Black" ? prev.black + 1 : prev.black,
+    }));
+  }, []);
+
+  const resetCounters = useCallback(() => {
+    setCounters({ white: 0, black: 0 });
+  }, []);
+
+  return { counters, incrementWinner, resetCounters };
+}
+
+// ─── Background Color ─────────────────────────────────────────────────────────
+
+const BG_COLOR_KEY = "chess-bg-color";
+const DEFAULT_BG_COLOR = "#D3D3D3";
+
+function useBackgroundColor() {
+  const [bgColor, setBgColor] = useState<string>(() => {
+    return localStorage.getItem(BG_COLOR_KEY) ?? DEFAULT_BG_COLOR;
+  });
+
+  useEffect(() => {
+    localStorage.setItem(BG_COLOR_KEY, bgColor);
+  }, [bgColor]);
+
+  return { bgColor, setBgColor };
+}
+
+// ─── End-of-Game Feedback (flash + sound) ─────────────────────────────────────
+
+function playGameEndSound(isWin: boolean) {
+  try {
+    const ctx = new AudioContext();
+    const now = ctx.currentTime;
+
+    if (isWin) {
+      // Triumphant ascending fanfare
+      const notes = [
+        { freq: 523.25, start: 0, duration: 0.15 },
+        { freq: 659.25, start: 0.15, duration: 0.15 },
+        { freq: 783.99, start: 0.3, duration: 0.15 },
+        { freq: 1046.5, start: 0.45, duration: 0.5 },
+      ];
+      for (const note of notes) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = "triangle";
+        osc.frequency.value = note.freq;
+        gain.gain.setValueAtTime(0.35, now + note.start);
+        gain.gain.exponentialRampToValueAtTime(
+          0.001,
+          now + note.start + note.duration,
+        );
+        osc.start(now + note.start);
+        osc.stop(now + note.start + note.duration + 0.05);
+      }
+    } else {
+      // Neutral draw/timeout thud
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(220, now);
+      osc.frequency.exponentialRampToValueAtTime(110, now + 0.4);
+      gain.gain.setValueAtTime(0.4, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+      osc.start(now);
+      osc.stop(now + 0.65);
+    }
+
+    // Auto-close the context
+    setTimeout(() => ctx.close(), 2000);
+  } catch {
+    // Web Audio may be blocked — silently ignore
+  }
+}
+
+interface FlashOverlayProps {
+  isWin: boolean;
+  onDone: () => void;
+}
+
+function FlashOverlay({ isWin, onDone }: FlashOverlayProps) {
+  useEffect(() => {
+    const timer = setTimeout(onDone, 800);
+    return () => clearTimeout(timer);
+  }, [onDone]);
+
+  return (
+    <div
+      className="fixed inset-0 pointer-events-none z-50 flash-overlay"
+      style={{
+        background: isWin
+          ? "radial-gradient(ellipse at center, oklch(0.88 0.22 55 / 0.7) 0%, oklch(0.88 0.22 55 / 0) 70%)"
+          : "radial-gradient(ellipse at center, oklch(0.7 0.1 265 / 0.5) 0%, oklch(0.7 0.1 265 / 0) 70%)",
+        animation: "flash-fade 0.8s ease-out forwards",
+      }}
+      aria-hidden="true"
+    />
+  );
+}
 
 // ─── Clock ────────────────────────────────────────────────────────────────────
 
-const INITIAL_TIME = 10 * 60;
+function durationToSeconds(duration: GameDuration): number {
+  if (duration === null) return 0;
+  return duration * 60;
+}
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -30,18 +220,19 @@ function formatTime(seconds: number): string {
   return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 }
 
-function useClock(gameState: GameState) {
-  const [whiteTime, setWhiteTime] = useState(INITIAL_TIME);
-  const [blackTime, setBlackTime] = useState(INITIAL_TIME);
+function useClock(gameState: GameState, initialTime: number) {
+  const [whiteTime, setWhiteTime] = useState(initialTime);
+  const [blackTime, setBlackTime] = useState(initialTime);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const isGameOver =
     gameState.status !== "playing" && gameState.status !== "check";
   const currentTurn = gameState.currentTurn;
+  const isTimed = initialTime > 0;
 
   useEffect(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
-    if (isGameOver) return;
+    if (isGameOver || !isTimed) return;
     intervalRef.current = setInterval(() => {
       if (currentTurn === "White") {
         setWhiteTime((t) => Math.max(0, t - 1));
@@ -52,11 +243,11 @@ function useClock(gameState: GameState) {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [currentTurn, isGameOver]);
+  }, [currentTurn, isGameOver, isTimed]);
 
-  const resetClocks = useCallback(() => {
-    setWhiteTime(INITIAL_TIME);
-    setBlackTime(INITIAL_TIME);
+  const resetClocks = useCallback((newInitialTime: number) => {
+    setWhiteTime(newInitialTime);
+    setBlackTime(newInitialTime);
   }, []);
 
   return { whiteTime, blackTime, resetClocks };
@@ -70,9 +261,15 @@ interface BoardProps {
   gameState: GameState;
   onSquareClick: (pos: Position) => void;
   lastMove?: { from: Position; to: Position };
+  engineThinking: boolean;
 }
 
-function ChessBoard({ gameState, onSquareClick, lastMove }: BoardProps) {
+function ChessBoard({
+  gameState,
+  onSquareClick,
+  lastMove,
+  engineThinking,
+}: BoardProps) {
   const { board, selectedSquare, legalMovesForSelected, currentTurn, status } =
     gameState;
 
@@ -97,7 +294,8 @@ function ChessBoard({ gameState, onSquareClick, lastMove }: BoardProps) {
     return piece.color === currentTurn;
   };
 
-  const isDisabled = status !== "playing" && status !== "check";
+  const isDisabled =
+    (status !== "playing" && status !== "check") || engineThinking;
 
   return (
     <div className="flex flex-col items-center select-none">
@@ -116,7 +314,7 @@ function ChessBoard({ gameState, onSquareClick, lastMove }: BoardProps) {
 
         <div>
           <div
-            className="grid shadow-board rounded-sm overflow-hidden border border-border/30"
+            className={`grid shadow-board rounded-sm overflow-hidden border border-border/30 transition-opacity duration-300 ${engineThinking ? "opacity-80" : ""}`}
             style={
               {
                 gridTemplateColumns: "repeat(8, var(--sq, 62px))",
@@ -157,7 +355,7 @@ function ChessBoard({ gameState, onSquareClick, lastMove }: BoardProps) {
                   <button
                     type="button"
                     key={`${row}-${col}`}
-                    className={`relative flex items-center justify-center cursor-pointer transition-all duration-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${squareClass} ${isDisabled ? "cursor-default" : ""}`}
+                    className={`relative flex items-center justify-center transition-all duration-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${squareClass} ${isDisabled ? "cursor-default" : "cursor-pointer"}`}
                     onClick={() => !isDisabled && onSquareClick({ row, col })}
                     aria-label={`${FILES[col]}${row + 1}${piece ? ` ${piece.color} ${piece.type}` : ""}`}
                     data-ocid={`sq-${FILES[col]}${row + 1}`}
@@ -236,49 +434,207 @@ function PromotionDialog({ color, onSelect }: PromotionDialogProps) {
   );
 }
 
+// ─── Win Counters Display ─────────────────────────────────────────────────────
+
+interface WinCountersDisplayProps {
+  counters: WinCounters;
+  whitePlayerName: string;
+  blackPlayerName: string;
+  onReset: () => void;
+}
+
+function WinCountersDisplay({
+  counters,
+  whitePlayerName,
+  blackPlayerName,
+  onReset,
+}: WinCountersDisplayProps) {
+  return (
+    <div className="flex items-center gap-3 flex-wrap" data-ocid="win-counters">
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-display font-semibold text-muted-foreground tracking-widest uppercase hidden sm:block">
+          Wins
+        </span>
+        <div className="flex items-center gap-1.5">
+          <div
+            className="flex items-center gap-1 px-2 py-1 rounded bg-muted/60 border border-border/40"
+            data-ocid="win-count-white"
+          >
+            <span className="text-xs font-display text-foreground truncate max-w-[72px]">
+              {whitePlayerName.split(" ")[0]}
+            </span>
+            <span className="text-sm font-display font-bold text-foreground tabular-nums min-w-[16px] text-center">
+              {counters.white}
+            </span>
+          </div>
+          <span className="text-xs text-muted-foreground/40">–</span>
+          <div
+            className="flex items-center gap-1 px-2 py-1 rounded bg-muted/60 border border-border/40"
+            data-ocid="win-count-black"
+          >
+            <span className="text-sm font-display font-bold text-foreground tabular-nums min-w-[16px] text-center">
+              {counters.black}
+            </span>
+            <span className="text-xs font-display text-foreground truncate max-w-[72px]">
+              {blackPlayerName.split(" ")[0]}
+            </span>
+          </div>
+        </div>
+      </div>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={onReset}
+        className="text-xs font-display text-muted-foreground hover:text-foreground h-7 px-2"
+        data-ocid="btn-reset-scores"
+        title="Reset win counters"
+      >
+        Reset Scores
+      </Button>
+    </div>
+  );
+}
+
+// ─── Background Color Picker ──────────────────────────────────────────────────
+
+interface BgColorPickerProps {
+  bgColor: string;
+  onChange: (color: string) => void;
+}
+
+function BgColorPicker({ bgColor, onChange }: BgColorPickerProps) {
+  return (
+    <div className="flex items-center gap-2" data-ocid="bg-color-picker">
+      <span className="text-xs font-display font-semibold text-muted-foreground tracking-widest uppercase hidden sm:block">
+        Background
+      </span>
+      <label className="relative flex items-center cursor-pointer">
+        {/* Swatch preview */}
+        <span
+          className="w-7 h-7 rounded-md border border-border/60 flex-shrink-0 overflow-hidden block"
+          style={{ backgroundColor: bgColor }}
+          aria-hidden="true"
+        />
+        <input
+          type="color"
+          value={bgColor}
+          onChange={(e) => onChange(e.target.value)}
+          className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+          aria-label="Background color"
+          data-ocid="input-bg-color"
+        />
+      </label>
+    </div>
+  );
+}
+
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
 interface SidebarProps {
   gameState: GameState;
   whiteTime: number;
   blackTime: number;
+  isTimed: boolean;
+  whitePlayerName: string;
+  blackPlayerName: string;
+  engineThinking: boolean;
+  opponentMode: string;
+  difficulty: number;
+  onOpponentChange: (mode: "human" | "engine", d: number) => void;
 }
 
 const CLOCK_COLORS: PieceColor[] = ["Black", "White"];
 
-function Sidebar({ gameState, whiteTime, blackTime }: SidebarProps) {
+function Sidebar({
+  gameState,
+  whiteTime,
+  blackTime,
+  isTimed,
+  whitePlayerName,
+  blackPlayerName,
+  engineThinking,
+  opponentMode,
+  difficulty,
+  onOpponentChange,
+}: SidebarProps) {
   const { capturedByWhite, capturedByBlack, currentTurn, status } = gameState;
   const isPlaying = status === "playing" || status === "check";
 
+  const playerName = (color: PieceColor) =>
+    color === "White" ? whitePlayerName : blackPlayerName;
+
   return (
     <div className="flex flex-col h-full p-4 gap-4 overflow-y-auto">
-      <div className="grid grid-cols-1 gap-3">
-        {CLOCK_COLORS.map((color) => {
-          const isActive = isPlaying && currentTurn === color;
-          const time = color === "White" ? whiteTime : blackTime;
-          const isLow = time < 60;
-          return (
-            <div
-              key={color}
-              className={`rounded-md px-4 py-3 border transition-all duration-300 ${isActive ? "bg-muted border-primary/40 clock-active" : "bg-muted/40 border-border"}`}
-              data-ocid={`clock-${color.toLowerCase()}`}
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground font-display uppercase tracking-wider">
-                  {color}
-                </span>
-                {isActive && (
-                  <span className="w-2 h-2 rounded-full bg-primary turn-indicator" />
-                )}
-              </div>
-              <span
-                className={`font-display font-bold text-2xl tabular-nums tracking-tight ${isLow && isActive ? "text-destructive" : "text-foreground"}`}
+      {isTimed && (
+        <div className="grid grid-cols-1 gap-3">
+          {CLOCK_COLORS.map((color) => {
+            const isActive = isPlaying && currentTurn === color;
+            const time = color === "White" ? whiteTime : blackTime;
+            const isLow = time < 60;
+            return (
+              <div
+                key={color}
+                className={`rounded-md px-4 py-3 border transition-all duration-300 ${isActive ? "bg-muted border-primary/40 clock-active" : "bg-muted/40 border-border"}`}
+                data-ocid={`clock-${color.toLowerCase()}`}
               >
-                {formatTime(time)}
-              </span>
-            </div>
-          );
-        })}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground font-display uppercase tracking-wider truncate max-w-[80%]">
+                    {playerName(color)}
+                  </span>
+                  {isActive && (
+                    <span className="w-2 h-2 rounded-full bg-primary turn-indicator flex-shrink-0" />
+                  )}
+                </div>
+                <span
+                  className={`font-display font-bold text-2xl tabular-nums tracking-tight ${isLow && isActive ? "text-destructive" : "text-foreground"}`}
+                >
+                  {formatTime(time)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {!isTimed && (
+        <div className="grid grid-cols-1 gap-3">
+          {CLOCK_COLORS.map((color) => {
+            const isActive = isPlaying && currentTurn === color;
+            return (
+              <div
+                key={color}
+                className={`rounded-md px-4 py-2.5 border transition-all duration-300 ${isActive ? "bg-muted border-primary/40" : "bg-muted/40 border-border"}`}
+                data-ocid={`player-${color.toLowerCase()}`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-display font-semibold text-foreground truncate max-w-[85%]">
+                    {playerName(color)}
+                  </span>
+                  {isActive && (
+                    <span className="w-2 h-2 rounded-full bg-primary turn-indicator flex-shrink-0" />
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Engine thinking indicator */}
+      <EngineThinking visible={engineThinking} />
+
+      <Separator />
+
+      {/* Opponent selector */}
+      <div>
+        <h3 className="text-xs font-display font-semibold text-muted-foreground tracking-widest uppercase mb-2">
+          Play Against
+        </h3>
+        <OpponentSelector
+          opponentMode={opponentMode as "human" | "engine"}
+          difficulty={difficulty}
+          onChange={onOpponentChange}
+        />
       </div>
 
       <Separator />
@@ -328,26 +684,83 @@ function Sidebar({ gameState, whiteTime, blackTime }: SidebarProps) {
   );
 }
 
-// ─── Controls ─────────────────────────────────────────────────────────────────
-
 // ─── Header ───────────────────────────────────────────────────────────────────
 
-function Header({ gameState }: { gameState: GameState }) {
+interface HeaderProps {
+  gameState: GameState;
+  themeId: string;
+  onThemeSelect: (id: string) => void;
+  duration: GameDuration;
+  onDurationSelect: (d: GameDuration) => void;
+  durationLocked: boolean;
+  whitePlayerName: string;
+  blackPlayerName: string;
+  onWhiteNameChange: (name: string) => void;
+  onBlackNameChange: (name: string) => void;
+  counters: WinCounters;
+  onResetCounters: () => void;
+  bgColor: string;
+  onBgColorChange: (color: string) => void;
+}
+
+function Header({
+  gameState,
+  themeId,
+  onThemeSelect,
+  duration,
+  onDurationSelect,
+  durationLocked,
+  whitePlayerName,
+  blackPlayerName,
+  onWhiteNameChange,
+  onBlackNameChange,
+  counters,
+  onResetCounters,
+  bgColor,
+  onBgColorChange,
+}: HeaderProps) {
   return (
-    <div className="flex items-center justify-between px-4 py-3">
-      <div className="flex items-center gap-2">
+    <div className="flex items-center justify-between px-4 py-2.5 gap-2 flex-wrap">
+      <div className="flex items-center gap-2 flex-shrink-0">
         <Crown className="w-5 h-5 text-secondary" />
-        <span className="font-display font-bold text-base tracking-tight text-foreground">
+        <span className="font-display font-bold text-base tracking-tight text-foreground hidden md:block">
           Grandmaster Chess
         </span>
       </div>
 
-      <div className="flex items-center gap-2 text-sm font-body">
-        <span className="text-foreground font-semibold">Player White</span>
-        <span className="text-muted-foreground text-xs">vs</span>
-        <span className="text-muted-foreground font-semibold">
-          Player Black
+      {/* Player name inputs */}
+      <div className="flex items-center gap-3 min-w-0">
+        <PlayerNameInput
+          color="white"
+          value={whitePlayerName}
+          onChange={onWhiteNameChange}
+        />
+        <span className="text-muted-foreground/50 text-xs font-display pb-0.5">
+          vs
         </span>
+        <PlayerNameInput
+          color="black"
+          value={blackPlayerName}
+          onChange={onBlackNameChange}
+        />
+      </div>
+
+      {/* Win counters */}
+      <WinCountersDisplay
+        counters={counters}
+        whitePlayerName={whitePlayerName}
+        blackPlayerName={blackPlayerName}
+        onReset={onResetCounters}
+      />
+
+      <div className="flex items-center gap-3 flex-wrap">
+        <DurationSelector
+          duration={duration}
+          onSelect={onDurationSelect}
+          disabled={durationLocked}
+        />
+        <ThemeSelector activeThemeId={themeId} onSelect={onThemeSelect} />
+        <BgColorPicker bgColor={bgColor} onChange={onBgColorChange} />
       </div>
 
       <StatusBadge
@@ -364,18 +777,29 @@ function Header({ gameState }: { gameState: GameState }) {
 function GameOverDialog({
   gameState,
   onNewGame,
-}: { gameState: GameState; onNewGame: () => void }) {
+  whitePlayerName,
+  blackPlayerName,
+}: {
+  gameState: GameState;
+  onNewGame: () => void;
+  whitePlayerName: string;
+  blackPlayerName: string;
+}) {
   const isGameOver =
     gameState.status !== "playing" && gameState.status !== "check";
   if (!isGameOver) return null;
 
+  const winnerName =
+    gameState.winner === "White" ? whitePlayerName : blackPlayerName;
+
   const messages: Partial<Record<GameState["status"], string>> = {
-    checkmate: `Checkmate! ${gameState.winner} wins!`,
+    checkmate: `Checkmate! ${winnerName} wins!`,
     stalemate: "Stalemate — It's a draw!",
     "draw-threefold": "Draw by threefold repetition",
     "draw-fifty": "Draw by 50-move rule",
     "draw-insufficient": "Draw — insufficient material",
-    resigned: `${gameState.winner} wins by resignation`,
+    resigned: `${winnerName} wins by resignation`,
+    timeout: `${winnerName} wins on time!`,
   };
 
   return (
@@ -420,12 +844,117 @@ export default function App() {
     to: Position;
   } | null>(null);
   const [drawOffer, setDrawOffer] = useState<PieceColor | null>(null);
-  // Keep a history stack for undo (each entry = full GameState before the move)
+  const [showFlash, setShowFlash] = useState(false);
+  const [flashIsWin, setFlashIsWin] = useState(false);
+  const [engineThinking, setEngineThinking] = useState(false);
   const historyStackRef = useRef<GameState[]>([]);
-  const { whiteTime, blackTime, resetClocks } = useClock(gameState);
+  const hasFiredRef = useRef(false);
+  const engineTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const { duration, setDuration } = useGameDuration();
+  const { activeThemeId, setActiveThemeId } = useChessTheme();
+  const {
+    whitePlayerName,
+    blackPlayerName,
+    setWhitePlayerName,
+    setBlackPlayerName,
+  } = usePlayerNames();
+  const { counters, incrementWinner, resetCounters } = useWinCounters();
+  const { bgColor, setBgColor } = useBackgroundColor();
+  const { opponentMode, setOpponentMode, difficulty, setDifficulty } =
+    useOpponentMode();
+
+  const initialTime = durationToSeconds(duration);
+  const isTimed = duration !== null;
+
+  // Track if game has started (first move made) — duration locked while playing
+  const gameHasStarted = gameState.moves.length > 0;
+  const isGameOver =
+    gameState.status !== "playing" && gameState.status !== "check";
+  const durationLocked = gameHasStarted && !isGameOver;
+
+  const { whiteTime, blackTime, resetClocks } = useClock(
+    gameState,
+    initialTime,
+  );
+
+  // ── Timeout detection ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isTimed) return;
+    if (isGameOver) return;
+    const timedOut =
+      (gameState.currentTurn === "White" && whiteTime === 0) ||
+      (gameState.currentTurn === "Black" && blackTime === 0);
+    if (!timedOut) return;
+    const winner: PieceColor =
+      gameState.currentTurn === "White" ? "Black" : "White";
+    setGameState((prev) => ({
+      ...prev,
+      status: "timeout",
+      winner,
+    }));
+  }, [whiteTime, blackTime, gameState.currentTurn, isTimed, isGameOver]);
+
+  // ── End-of-game feedback (flash + sound + win counter) ─────────────────────
+  useEffect(() => {
+    if (!isGameOver) {
+      hasFiredRef.current = false;
+      return;
+    }
+    if (hasFiredRef.current) return;
+    hasFiredRef.current = true;
+
+    const hasWinner =
+      gameState.status === "checkmate" ||
+      gameState.status === "resigned" ||
+      gameState.status === "timeout";
+
+    setFlashIsWin(hasWinner);
+    setShowFlash(true);
+    playGameEndSound(hasWinner);
+
+    if (hasWinner && gameState.winner) {
+      incrementWinner(gameState.winner);
+    }
+  }, [isGameOver, gameState.status, gameState.winner, incrementWinner]);
+
+  // ── Engine move trigger ────────────────────────────────────────────────────
+  // After a state update, if it's the engine's turn (Black), fire getBestMove
+  useEffect(() => {
+    if (opponentMode !== "engine") return;
+    if (isGameOver) return;
+    if (gameState.currentTurn !== "Black") return;
+    if (engineThinking) return;
+
+    setEngineThinking(true);
+    const depth = difficulty + 1; // difficulty 1→2, ... 5→6
+    const snapshot = gameState;
+
+    engineTimerRef.current = setTimeout(() => {
+      const move = getBestMove(snapshot, depth);
+      if (move) {
+        historyStackRef.current = [...historyStackRef.current, snapshot];
+        const next = applyMove(snapshot, move.from, move.to, move.promotion);
+        setGameState(next);
+        setLastMove({ from: move.from, to: move.to });
+      }
+      setEngineThinking(false);
+    }, 500);
+
+    return () => {
+      if (engineTimerRef.current) clearTimeout(engineTimerRef.current);
+    };
+  }, [gameState, opponentMode, difficulty, isGameOver, engineThinking]);
+
+  const handleOpponentChange = useCallback(
+    (mode: "human" | "engine", d: number) => {
+      setOpponentMode(mode);
+      setDifficulty(d);
+    },
+    [setOpponentMode, setDifficulty],
+  );
 
   const handleSquareClick = useCallback((pos: Position) => {
-    // Any move cancels a pending draw offer from the opponent
     setDrawOffer(null);
     setGameState((prev) => {
       if (prev.promotionPending) return prev;
@@ -462,7 +991,6 @@ export default function App() {
         setPrePromotionState(prev);
         setPendingPromoMove({ from: selectedSquare, to: pos });
         setLastMove({ from: selectedSquare, to: pos });
-        // Push to history before promotion
         historyStackRef.current = [...historyStackRef.current, prev];
         return {
           ...prev,
@@ -472,7 +1000,6 @@ export default function App() {
         };
       }
 
-      // Push state before the move for undo support
       historyStackRef.current = [...historyStackRef.current, prev];
       const next = applyMove(prev, selectedSquare, pos);
       setLastMove({ from: selectedSquare, to: pos });
@@ -497,14 +1024,22 @@ export default function App() {
   );
 
   const handleNewGame = useCallback(() => {
+    // Clear any pending engine timer
+    if (engineTimerRef.current) {
+      clearTimeout(engineTimerRef.current);
+      engineTimerRef.current = null;
+    }
+    setEngineThinking(false);
     setGameState(createInitialGameState());
     setLastMove(undefined);
     setPrePromotionState(null);
     setPendingPromoMove(null);
     setDrawOffer(null);
+    setShowFlash(false);
+    hasFiredRef.current = false;
     historyStackRef.current = [];
-    resetClocks();
-  }, [resetClocks]);
+    resetClocks(durationToSeconds(duration));
+  }, [resetClocks, duration]);
 
   const handleResign = useCallback(() => {
     setGameState((prev) => ({
@@ -517,8 +1052,8 @@ export default function App() {
 
   const handleOfferDraw = useCallback(() => {
     setGameState((prev) => {
-      const isGameOver = prev.status !== "playing" && prev.status !== "check";
-      if (isGameOver) return prev;
+      const over = prev.status !== "playing" && prev.status !== "check";
+      if (over) return prev;
       return prev;
     });
     setDrawOffer((prev) => (prev ? null : gameState.currentTurn));
@@ -556,34 +1091,55 @@ export default function App() {
 
   const handleUndo = useCallback(() => {
     const stack = historyStackRef.current;
-    // Undo a full move = 2 half-moves; pop twice if possible
-    if (stack.length < 2) return;
-    const prevState = stack[stack.length - 2];
-    historyStackRef.current = stack.slice(0, -2);
+    if (stack.length < 1) return;
+    // In engine mode: undo takes back the engine move (if last), then can undo again for human's move
+    const prevState = stack[stack.length - 1];
+    historyStackRef.current = stack.slice(0, -1);
     setGameState(prevState);
     setLastMove(undefined);
     setDrawOffer(null);
+    setEngineThinking(false);
+    if (engineTimerRef.current) {
+      clearTimeout(engineTimerRef.current);
+      engineTimerRef.current = null;
+    }
   }, []);
 
-  // promotionPending is set BEFORE the turn switches, so currentTurn IS the promoting player
   const promotionColor: PieceColor = gameState.promotionPending
     ? gameState.currentTurn
     : "White";
 
-  // The opponent of whoever offered the draw is the one who must respond
   const drawOfferForCurrentPlayer =
     drawOffer !== null && drawOffer !== gameState.currentTurn;
 
   return (
-    <>
+    <div style={{ backgroundColor: bgColor }} className="min-h-screen">
       <Layout
         gameState={gameState}
-        header={<Header gameState={gameState} />}
+        header={
+          <Header
+            gameState={gameState}
+            themeId={activeThemeId}
+            onThemeSelect={setActiveThemeId}
+            duration={duration}
+            onDurationSelect={setDuration}
+            durationLocked={durationLocked}
+            whitePlayerName={whitePlayerName}
+            blackPlayerName={blackPlayerName}
+            onWhiteNameChange={setWhitePlayerName}
+            onBlackNameChange={setBlackPlayerName}
+            counters={counters}
+            onResetCounters={resetCounters}
+            bgColor={bgColor}
+            onBgColorChange={setBgColor}
+          />
+        }
         board={
           <ChessBoard
             gameState={gameState}
             onSquareClick={handleSquareClick}
             lastMove={lastMove}
+            engineThinking={engineThinking}
           />
         }
         sidebar={
@@ -591,6 +1147,13 @@ export default function App() {
             gameState={gameState}
             whiteTime={whiteTime}
             blackTime={blackTime}
+            isTimed={isTimed}
+            whitePlayerName={whitePlayerName}
+            blackPlayerName={blackPlayerName}
+            engineThinking={engineThinking}
+            opponentMode={opponentMode}
+            difficulty={difficulty}
+            onOpponentChange={handleOpponentChange}
           />
         }
         moveList={<MoveHistory gameState={gameState} />}
@@ -602,7 +1165,7 @@ export default function App() {
             >
               <span className="text-sm font-body text-muted-foreground">
                 <span className="text-foreground font-semibold">
-                  {drawOffer}
+                  {drawOffer === "White" ? whitePlayerName : blackPlayerName}
                 </span>{" "}
                 offers a draw
               </span>
@@ -644,7 +1207,16 @@ export default function App() {
         <PromotionDialog color={promotionColor} onSelect={handlePromotion} />
       )}
 
-      <GameOverDialog gameState={gameState} onNewGame={handleNewGame} />
-    </>
+      <GameOverDialog
+        gameState={gameState}
+        onNewGame={handleNewGame}
+        whitePlayerName={whitePlayerName}
+        blackPlayerName={blackPlayerName}
+      />
+
+      {showFlash && (
+        <FlashOverlay isWin={flashIsWin} onDone={() => setShowFlash(false)} />
+      )}
+    </div>
   );
 }

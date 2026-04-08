@@ -48,7 +48,8 @@ export type GameStatus =
   | "draw-threefold"
   | "draw-fifty"
   | "draw-insufficient"
-  | "resigned";
+  | "resigned"
+  | "timeout";
 
 export interface GameState {
   board: BoardState;

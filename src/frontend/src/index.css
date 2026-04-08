@@ -56,6 +56,12 @@
     --board-legal: oklch(0.72 0.18 120 / 0.45);
     --board-last-move: oklch(0.65 0.15 55 / 0.4);
     --board-check: oklch(0.62 0.22 22 / 0.65);
+
+    /* Chess piece colors (overridden by theme switcher) */
+    --piece-white-color: oklch(0.97 0.02 60);
+    --piece-white-shadow: 0 1px 3px oklch(0.1 0.01 265 / 0.8);
+    --piece-black-color: oklch(0.15 0.02 265);
+    --piece-black-shadow: 0 1px 2px oklch(0.1 0.01 265 / 0.5);
   }
 
   .dark {
@@ -106,6 +112,12 @@
     --board-legal: oklch(0.72 0.18 120 / 0.5);
     --board-last-move: oklch(0.68 0.15 55 / 0.4);
     --board-check: oklch(0.65 0.22 22 / 0.7);
+
+    /* Chess piece colors — dark mode defaults */
+    --piece-white-color: oklch(0.97 0.02 60);
+    --piece-white-shadow: 0 1px 3px oklch(0.1 0.01 265 / 0.8);
+    --piece-black-color: oklch(0.15 0.02 265);
+    --piece-black-shadow: 0 1px 2px oklch(0.1 0.01 265 / 0.5);
   }
 
   * {
@@ -195,15 +207,15 @@
     background-color: var(--board-check) !important;
   }
 
-  /* Piece styles */
+  /* Piece styles — colors driven by theme CSS variables */
   .piece-white {
-    color: oklch(0.97 0.02 60);
-    text-shadow: 0 1px 3px oklch(0.1 0.01 265 / 0.8);
+    color: var(--piece-white-color, oklch(0.97 0.02 60));
+    text-shadow: var(--piece-white-shadow, 0 1px 3px oklch(0.1 0.01 265 / 0.8));
   }
 
   .piece-black {
-    color: oklch(0.15 0.02 265);
-    text-shadow: 0 1px 2px oklch(0.1 0.01 265 / 0.5);
+    color: var(--piece-black-color, oklch(0.15 0.02 265));
+    text-shadow: var(--piece-black-shadow, 0 1px 2px oklch(0.1 0.01 265 / 0.5));
   }
 
   /* Game status badge */
@@ -238,5 +250,22 @@
 
   .shadow-board {
     box-shadow: 0 8px 32px oklch(0 0 0 / 0.6), 0 2px 8px oklch(0 0 0 / 0.4);
+  }
+
+  /* End-of-game flash overlay animation */
+  @keyframes flash-fade {
+    0% {
+      opacity: 1;
+    }
+    30% {
+      opacity: 0.9;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+
+  .flash-overlay {
+    animation: flash-fade 0.8s ease-out forwards;
   }
 }
