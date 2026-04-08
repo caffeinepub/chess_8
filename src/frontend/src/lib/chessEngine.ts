@@ -1,10 +1,11 @@
 /**
- * Chess AI Engine — minimax with alpha-beta pruning
+ * Chess AI Engine — iterative deepening + alpha-beta pruning + transposition table
  *
- * getBestMove(gameState, depth) → Move | null
+ * getBestMove(gameState, timeBudgetMs) → Move | null
  *
- * Evaluation: material values + piece-square tables + mobility bonus
- * Move ordering: captures sorted by MVV-LVA, then check-giving moves
+ * Evaluation: material + piece-square tables + mobility bonus
+ * Search: iterative deepening with per-node deadline check, transposition table
+ * Move ordering: TT hint → captures (MVV-LVA) → quiet moves
  */
 
 import type {
@@ -90,7 +91,6 @@ const PST: Record<PieceType, number[]> = {
 // ─── Evaluation ───────────────────────────────────────────────────────────────
 
 function pstIndex(row: number, col: number, color: PieceColor): number {
-  // White reads the table top-to-bottom as rows 7→0 (flip vertically)
   const r = color === "White" ? 7 - row : row;
   return r * 8 + col;
 }
@@ -157,79 +157,159 @@ function enumerateMoves(
   return moves;
 }
 
-// ─── Move Ordering (MVV-LVA + check bonus) ───────────────────────────────────
+// ─── Move Ordering (TT hint + MVV-LVA) ───────────────────────────────────────
 
 function mvvLvaScore(board: BoardState, from: Position, to: Position): number {
   const attacker = board[from.row][from.col];
   const victim = board[to.row][to.col];
   if (!attacker) return 0;
-  if (!victim) return 0; // not a capture
-  // Higher victim value and lower attacker value → higher priority
+  if (!victim) return 0;
   return PIECE_VALUE[victim.type] * 10 - PIECE_VALUE[attacker.type];
 }
 
 function orderMoves(
   state: GameState,
   moves: Array<{ from: Position; to: Position }>,
+  ttBestFrom: Position | null,
+  ttBestTo: Position | null,
 ): Array<{ from: Position; to: Position }> {
   return [...moves].sort((a, b) => {
+    // TT hint move goes first
+    const aIsTT =
+      ttBestFrom &&
+      ttBestTo &&
+      a.from.row === ttBestFrom.row &&
+      a.from.col === ttBestFrom.col &&
+      a.to.row === ttBestTo.row &&
+      a.to.col === ttBestTo.col
+        ? 1
+        : 0;
+    const bIsTT =
+      ttBestFrom &&
+      ttBestTo &&
+      b.from.row === ttBestFrom.row &&
+      b.from.col === ttBestFrom.col &&
+      b.to.row === ttBestTo.row &&
+      b.to.col === ttBestTo.col
+        ? 1
+        : 0;
+    if (aIsTT !== bIsTT) return bIsTT - aIsTT;
+
     const scoreB = mvvLvaScore(state.board, b.from, b.to);
     const scoreA = mvvLvaScore(state.board, a.from, a.to);
-    return scoreB - scoreA; // descending — best captures first
+    return scoreB - scoreA;
   });
 }
 
-// ─── Minimax with Alpha-Beta Pruning ─────────────────────────────────────────
+// ─── Transposition Table ──────────────────────────────────────────────────────
+
+type TTFlag = "exact" | "lower" | "upper";
+
+interface TTEntry {
+  depth: number;
+  score: number;
+  flag: TTFlag;
+  bestFrom: Position | null;
+  bestTo: Position | null;
+}
+
+// Board hash key: encode board + turn + en-passant into a compact string
+function boardKey(state: GameState): string {
+  let key = state.currentTurn[0];
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const p = state.board[r][c];
+      if (p) {
+        key += `${r}${c}${p.color[0]}${p.type[0]}`;
+      }
+    }
+  }
+  if (state.enPassantTarget) {
+    key += `E${state.enPassantTarget.row}${state.enPassantTarget.col}`;
+  }
+  return key;
+}
+
+// ─── Timeout Error ────────────────────────────────────────────────────────────
+
+class SearchTimeout extends Error {}
+
+// ─── Search State ─────────────────────────────────────────────────────────────
+
+interface SearchContext {
+  deadline: number;
+  nodeCount: number;
+  tt: Map<string, TTEntry>;
+}
 
 const CHECKMATE_SCORE = 100000;
 
-function minimaxMax(
+// ─── Negamax with Alpha-Beta + TT + Timeout ───────────────────────────────────
+
+function negamax(
   state: GameState,
   depth: number,
   alphaIn: number,
-  beta: number,
+  betaIn: number,
+  ctx: SearchContext,
 ): number {
-  if (depth === 0 || isTerminal(state)) return terminalOrEval(state, depth);
+  // Check deadline every 128 nodes
+  ctx.nodeCount++;
+  if ((ctx.nodeCount & 127) === 0 && Date.now() >= ctx.deadline) {
+    throw new SearchTimeout();
+  }
+
+  // TT probe
+  const key = boardKey(state);
+  const ttEntry = ctx.tt.get(key);
+  if (ttEntry && ttEntry.depth >= depth) {
+    if (ttEntry.flag === "exact") return ttEntry.score;
+    if (ttEntry.flag === "lower" && ttEntry.score > alphaIn) {
+      if (ttEntry.score >= betaIn) return ttEntry.score;
+    }
+    if (ttEntry.flag === "upper" && ttEntry.score < betaIn) {
+      if (ttEntry.score <= alphaIn) return ttEntry.score;
+    }
+  }
+
+  // Terminal check
+  if (isTerminal(state)) return terminalScore(state, depth);
+  if (depth === 0) return leafScore(state);
 
   const rawMoves = enumerateMoves(state);
-  if (rawMoves.length === 0) return evaluate(state);
+  if (rawMoves.length === 0) return leafScore(state);
+
+  const ttBestFrom = ttEntry?.bestFrom ?? null;
+  const ttBestTo = ttEntry?.bestTo ?? null;
+  const ordered = orderMoves(state, rawMoves, ttBestFrom, ttBestTo);
 
   let alpha = alphaIn;
   let best = Number.NEGATIVE_INFINITY;
-  for (const { from, to } of orderMoves(state, rawMoves)) {
+  let bestFrom: Position | null = null;
+  let bestTo: Position | null = null;
+
+  for (const { from, to } of ordered) {
     const piece = state.board[from.row][from.col];
     const isPromo = piece?.type === "Pawn" && (to.row === 0 || to.row === 7);
     const next = applyMove(state, from, to, isPromo ? "Queen" : undefined);
-    const score = minimaxMin(next, depth - 1, alpha, beta);
-    if (score > best) best = score;
+    // Negate: next state is opponent's turn, score is from their perspective
+    const score = -negamax(next, depth - 1, -betaIn, -alpha, ctx);
+
+    if (score > best) {
+      best = score;
+      bestFrom = from;
+      bestTo = to;
+    }
     if (best > alpha) alpha = best;
-    if (alpha >= beta) break; // β cutoff
+    if (alpha >= betaIn) break; // β cutoff
   }
-  return best;
-}
 
-function minimaxMin(
-  state: GameState,
-  depth: number,
-  alpha: number,
-  betaIn: number,
-): number {
-  if (depth === 0 || isTerminal(state)) return terminalOrEval(state, depth);
+  // Store in TT
+  let flag: TTFlag = "exact";
+  if (best <= alphaIn) flag = "upper";
+  else if (best >= betaIn) flag = "lower";
+  ctx.tt.set(key, { depth, score: best, flag, bestFrom, bestTo });
 
-  const rawMoves = enumerateMoves(state);
-  if (rawMoves.length === 0) return evaluate(state);
-
-  let beta = betaIn;
-  let best = Number.POSITIVE_INFINITY;
-  for (const { from, to } of orderMoves(state, rawMoves)) {
-    const piece = state.board[from.row][from.col];
-    const isPromo = piece?.type === "Pawn" && (to.row === 0 || to.row === 7);
-    const next = applyMove(state, from, to, isPromo ? "Queen" : undefined);
-    const score = minimaxMax(next, depth - 1, alpha, beta);
-    if (score < best) best = score;
-    if (best < beta) beta = best;
-    if (alpha >= beta) break; // α cutoff
-  }
   return best;
 }
 
@@ -243,69 +323,118 @@ function isTerminal(state: GameState): boolean {
   );
 }
 
-function terminalOrEval(state: GameState, depth: number): number {
+function terminalScore(state: GameState, depth: number): number {
   if (state.status === "checkmate") {
-    // The side that just moved delivered checkmate; current turn is the loser
-    return state.currentTurn === "White"
-      ? -CHECKMATE_SCORE - depth
-      : CHECKMATE_SCORE + depth;
+    // Current side to move is in checkmate — they lose
+    return -(CHECKMATE_SCORE + depth);
   }
-  if (isTerminal(state)) return 0;
-  return evaluate(state);
+  return 0; // stalemate / draw
 }
+
+function leafScore(state: GameState): number {
+  // Return score from perspective of side to move (negamax convention)
+  const abs = evaluate(state);
+  return state.currentTurn === "White" ? abs : -abs;
+}
+
+// ─── Difficulty Time Budgets ──────────────────────────────────────────────────
+
+const DIFFICULTY_TIME_MS: Record<number, number> = {
+  1: 100,
+  2: 200,
+  3: 350,
+  4: 600,
+  5: 900,
+};
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
  * Returns the best move for the current player given the game state.
+ * Uses iterative deepening with a time budget per difficulty level.
  * Returns null if there are no legal moves (checkmate / stalemate).
  *
- * Depth mapping for callers:
- *   difficulty 1 → depth 2
- *   difficulty 2 → depth 3
- *   difficulty 3 → depth 4
- *   difficulty 4 → depth 5
- *   difficulty 5 → depth 6
+ * timeBudgetMs is determined by difficulty:
+ *   1 → 100ms, 2 → 200ms, 3 → 350ms, 4 → 600ms, 5 → 900ms
  */
-export function getBestMove(gameState: GameState, depth: number): Move | null {
+export function getBestMove(
+  gameState: GameState,
+  difficulty: number,
+): Move | null {
   const rawMoves = enumerateMoves(gameState);
   if (rawMoves.length === 0) return null;
 
-  const orderedMoves = orderMoves(gameState, rawMoves);
-  const maximizing = gameState.currentTurn === "White";
+  const timeBudget = DIFFICULTY_TIME_MS[difficulty] ?? 900;
+  const deadline = Date.now() + timeBudget;
 
-  let bestScore = maximizing
-    ? Number.NEGATIVE_INFINITY
-    : Number.POSITIVE_INFINITY;
+  const ctx: SearchContext = {
+    deadline,
+    nodeCount: 0,
+    tt: new Map<string, TTEntry>(),
+  };
+
   let bestFrom: Position | null = null;
   let bestTo: Position | null = null;
 
-  for (const { from, to } of orderedMoves) {
-    const piece = gameState.board[from.row][from.col];
-    const isPromo = piece?.type === "Pawn" && (to.row === 0 || to.row === 7);
-    const next = applyMove(gameState, from, to, isPromo ? "Queen" : undefined);
-    const score = maximizing
-      ? minimaxMin(
+  // Iterative deepening: start at depth 1, go deeper while time allows
+  for (let depth = 1; depth <= 8; depth++) {
+    try {
+      const orderedMoves = orderMoves(gameState, rawMoves, bestFrom, bestTo);
+      let iterBestScore = Number.NEGATIVE_INFINITY;
+      let iterBestFrom: Position | null = null;
+      let iterBestTo: Position | null = null;
+
+      for (const { from, to } of orderedMoves) {
+        const piece = gameState.board[from.row][from.col];
+        const isPromo =
+          piece?.type === "Pawn" && (to.row === 0 || to.row === 7);
+        const next = applyMove(
+          gameState,
+          from,
+          to,
+          isPromo ? "Queen" : undefined,
+        );
+        const score = -negamax(
           next,
           depth - 1,
           Number.NEGATIVE_INFINITY,
           Number.POSITIVE_INFINITY,
-        )
-      : minimaxMax(
-          next,
-          depth - 1,
-          Number.NEGATIVE_INFINITY,
-          Number.POSITIVE_INFINITY,
+          ctx,
         );
 
-    if (maximizing ? score > bestScore : score < bestScore) {
-      bestScore = score;
-      bestFrom = from;
-      bestTo = to;
+        if (score > iterBestScore) {
+          iterBestScore = score;
+          iterBestFrom = from;
+          iterBestTo = to;
+        }
+      }
+
+      // Completed iteration — save best move
+      if (iterBestFrom && iterBestTo) {
+        bestFrom = iterBestFrom;
+        bestTo = iterBestTo;
+      }
+
+      // If we found a forced checkmate, stop early
+      if (iterBestScore >= CHECKMATE_SCORE) break;
+
+      // Check if time expired between iterations
+      if (Date.now() >= deadline) break;
+    } catch (e) {
+      if (e instanceof SearchTimeout) {
+        // Time ran out mid-search — use best move from last completed iteration
+        break;
+      }
+      throw e;
     }
   }
 
-  if (!bestFrom || !bestTo) return null;
+  // Fall back to first legal move if somehow bestFrom is null
+  if (!bestFrom || !bestTo) {
+    const first = rawMoves[0];
+    bestFrom = first.from;
+    bestTo = first.to;
+  }
 
   const piece = gameState.board[bestFrom.row][bestFrom.col];
   if (!piece) return null;

@@ -66,9 +66,29 @@ interface StatusBadgeProps {
   status: GameState["status"];
   currentTurn: PieceColor;
   winner?: PieceColor;
+  isPaused?: boolean;
 }
 
-export function StatusBadge({ status, currentTurn, winner }: StatusBadgeProps) {
+export function StatusBadge({
+  status,
+  currentTurn,
+  winner,
+  isPaused,
+}: StatusBadgeProps) {
+  // Show paused badge when game is active and paused
+  const isActive = status === "playing" || status === "check";
+  if (isPaused && isActive) {
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-display font-semibold tracking-wide bg-secondary/20 text-secondary border border-secondary/40"
+        data-ocid="status-paused"
+      >
+        <span className="w-1.5 h-1.5 rounded-full bg-secondary" />
+        Paused
+      </span>
+    );
+  }
+
   const getStatusInfo = () => {
     switch (status) {
       case "playing":

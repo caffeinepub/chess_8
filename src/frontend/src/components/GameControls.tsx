@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import type { GameState } from "@/types/chess";
-import { Flag, Handshake, RotateCcw, Undo2 } from "lucide-react";
+import { Flag, Handshake, Pause, Play, RotateCcw, Undo2 } from "lucide-react";
 
 interface GameControlsProps {
   gameState: GameState;
@@ -10,6 +10,8 @@ interface GameControlsProps {
   onClaimDraw: () => void;
   onUndo: () => void;
   drawOffer?: "White" | "Black" | null;
+  isPaused: boolean;
+  onTogglePause: () => void;
 }
 
 export function GameControls({
@@ -20,6 +22,8 @@ export function GameControls({
   onClaimDraw,
   onUndo,
   drawOffer,
+  isPaused,
+  onTogglePause,
 }: GameControlsProps) {
   const isGameOver =
     gameState.status !== "playing" && gameState.status !== "check";
@@ -44,6 +48,28 @@ export function GameControls({
       data-ocid="game-controls"
     >
       <div className="flex items-center gap-2">
+        {/* Pause / Resume — prominent, not destructive */}
+        <Button
+          variant={isPaused ? "default" : "outline"}
+          size="sm"
+          onClick={onTogglePause}
+          disabled={isGameOver}
+          className={`gap-1.5 font-display text-xs ${
+            isPaused
+              ? "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+              : ""
+          }`}
+          data-ocid="btn-pause"
+          aria-label={isPaused ? "Resume game" : "Pause game"}
+        >
+          {isPaused ? (
+            <Play className="w-3.5 h-3.5" />
+          ) : (
+            <Pause className="w-3.5 h-3.5" />
+          )}
+          {isPaused ? "Resume" : "Pause"}
+        </Button>
+
         <Button
           variant="outline"
           size="sm"

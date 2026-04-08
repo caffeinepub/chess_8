@@ -220,7 +220,11 @@ function formatTime(seconds: number): string {
   return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 }
 
-function useClock(gameState: GameState, initialTime: number) {
+function useClock(
+  gameState: GameState,
+  initialTime: number,
+  isPaused: boolean,
+) {
   const [whiteTime, setWhiteTime] = useState(initialTime);
   const [blackTime, setBlackTime] = useState(initialTime);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -232,7 +236,7 @@ function useClock(gameState: GameState, initialTime: number) {
 
   useEffect(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
-    if (isGameOver || !isTimed) return;
+    if (isGameOver || !isTimed || isPaused) return;
     intervalRef.current = setInterval(() => {
       if (currentTurn === "White") {
         setWhiteTime((t) => Math.max(0, t - 1));
@@ -243,7 +247,7 @@ function useClock(gameState: GameState, initialTime: number) {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [currentTurn, isGameOver, isTimed]);
+  }, [currentTurn, isGameOver, isTimed, isPaused]);
 
   const resetClocks = useCallback((newInitialTime: number) => {
     setWhiteTime(newInitialTime);
@@ -262,6 +266,7 @@ interface BoardProps {
   onSquareClick: (pos: Position) => void;
   lastMove?: { from: Position; to: Position };
   engineThinking: boolean;
+  isPaused: boolean;
 }
 
 function ChessBoard({
@@ -269,6 +274,7 @@ function ChessBoard({
   onSquareClick,
   lastMove,
   engineThinking,
+  isPaused,
 }: BoardProps) {
   const { board, selectedSquare, legalMovesForSelected, currentTurn, status } =
     gameState;
@@ -295,7 +301,7 @@ function ChessBoard({
   };
 
   const isDisabled =
-    (status !== "playing" && status !== "check") || engineThinking;
+    (status !== "playing" && status !== "check") || engineThinking || isPaused;
 
   return (
     <div className="flex flex-col items-center select-none">
@@ -500,15 +506,25 @@ function WinCountersDisplay({
 interface BgColorPickerProps {
   bgColor: string;
   onChange: (color: string) => void;
+  disabled?: boolean;
 }
 
-function BgColorPicker({ bgColor, onChange }: BgColorPickerProps) {
+function BgColorPicker({
+  bgColor,
+  onChange,
+  disabled = false,
+}: BgColorPickerProps) {
   return (
-    <div className="flex items-center gap-2" data-ocid="bg-color-picker">
+    <div
+      className={`flex items-center gap-2 ${disabled ? "opacity-50" : ""}`}
+      data-ocid="bg-color-picker"
+    >
       <span className="text-xs font-display font-semibold text-muted-foreground tracking-widest uppercase hidden sm:block">
         Background
       </span>
-      <label className="relative flex items-center cursor-pointer">
+      <label
+        className={`relative flex items-center ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
+      >
         {/* Swatch preview */}
         <span
           className="w-7 h-7 rounded-md border border-border/60 flex-shrink-0 overflow-hidden block"
@@ -519,7 +535,8 @@ function BgColorPicker({ bgColor, onChange }: BgColorPickerProps) {
           type="color"
           value={bgColor}
           onChange={(e) => onChange(e.target.value)}
-          className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+          disabled={disabled}
+          className={`absolute inset-0 opacity-0 w-full h-full ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
           aria-label="Background color"
           data-ocid="input-bg-color"
         />
@@ -541,6 +558,7 @@ interface SidebarProps {
   opponentMode: string;
   difficulty: number;
   onOpponentChange: (mode: "human" | "engine", d: number) => void;
+  settingsLocked: boolean;
 }
 
 const CLOCK_COLORS: PieceColor[] = ["Black", "White"];
@@ -556,6 +574,7 @@ function Sidebar({
   opponentMode,
   difficulty,
   onOpponentChange,
+  settingsLocked,
 }: SidebarProps) {
   const { capturedByWhite, capturedByBlack, currentTurn, status } = gameState;
   const isPlaying = status === "playing" || status === "check";
@@ -634,6 +653,7 @@ function Sidebar({
           opponentMode={opponentMode as "human" | "engine"}
           difficulty={difficulty}
           onChange={onOpponentChange}
+          disabled={settingsLocked}
         />
       </div>
 
@@ -692,7 +712,7 @@ interface HeaderProps {
   onThemeSelect: (id: string) => void;
   duration: GameDuration;
   onDurationSelect: (d: GameDuration) => void;
-  durationLocked: boolean;
+  settingsLocked: boolean;
   whitePlayerName: string;
   blackPlayerName: string;
   onWhiteNameChange: (name: string) => void;
@@ -701,6 +721,7 @@ interface HeaderProps {
   onResetCounters: () => void;
   bgColor: string;
   onBgColorChange: (color: string) => void;
+  isPaused: boolean;
 }
 
 function Header({
@@ -709,7 +730,7 @@ function Header({
   onThemeSelect,
   duration,
   onDurationSelect,
-  durationLocked,
+  settingsLocked,
   whitePlayerName,
   blackPlayerName,
   onWhiteNameChange,
@@ -718,6 +739,7 @@ function Header({
   onResetCounters,
   bgColor,
   onBgColorChange,
+  isPaused,
 }: HeaderProps) {
   return (
     <div className="flex items-center justify-between px-4 py-2.5 gap-2 flex-wrap">
@@ -734,6 +756,7 @@ function Header({
           color="white"
           value={whitePlayerName}
           onChange={onWhiteNameChange}
+          disabled={settingsLocked}
         />
         <span className="text-muted-foreground/50 text-xs font-display pb-0.5">
           vs
@@ -742,6 +765,7 @@ function Header({
           color="black"
           value={blackPlayerName}
           onChange={onBlackNameChange}
+          disabled={settingsLocked}
         />
       </div>
 
@@ -757,16 +781,25 @@ function Header({
         <DurationSelector
           duration={duration}
           onSelect={onDurationSelect}
-          disabled={durationLocked}
+          disabled={settingsLocked}
         />
-        <ThemeSelector activeThemeId={themeId} onSelect={onThemeSelect} />
-        <BgColorPicker bgColor={bgColor} onChange={onBgColorChange} />
+        <ThemeSelector
+          activeThemeId={themeId}
+          onSelect={onThemeSelect}
+          disabled={settingsLocked}
+        />
+        <BgColorPicker
+          bgColor={bgColor}
+          onChange={onBgColorChange}
+          disabled={settingsLocked}
+        />
       </div>
 
       <StatusBadge
         status={gameState.status}
         currentTurn={gameState.currentTurn}
         winner={gameState.winner}
+        isPaused={isPaused}
       />
     </div>
   );
@@ -847,6 +880,7 @@ export default function App() {
   const [showFlash, setShowFlash] = useState(false);
   const [flashIsWin, setFlashIsWin] = useState(false);
   const [engineThinking, setEngineThinking] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const historyStackRef = useRef<GameState[]>([]);
   const hasFiredRef = useRef(false);
   const engineTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -867,15 +901,16 @@ export default function App() {
   const initialTime = durationToSeconds(duration);
   const isTimed = duration !== null;
 
-  // Track if game has started (first move made) — duration locked while playing
+  // Track if game has started (first move made) — all settings locked while playing
   const gameHasStarted = gameState.moves.length > 0;
   const isGameOver =
     gameState.status !== "playing" && gameState.status !== "check";
-  const durationLocked = gameHasStarted && !isGameOver;
+  const settingsLocked = gameHasStarted && !isGameOver;
 
   const { whiteTime, blackTime, resetClocks } = useClock(
     gameState,
     initialTime,
+    isPaused,
   );
 
   // ── Timeout detection ──────────────────────────────────────────────────────
@@ -925,13 +960,13 @@ export default function App() {
     if (isGameOver) return;
     if (gameState.currentTurn !== "Black") return;
     if (engineThinking) return;
+    if (isPaused) return;
 
     setEngineThinking(true);
-    const depth = difficulty + 1; // difficulty 1→2, ... 5→6
     const snapshot = gameState;
 
     engineTimerRef.current = setTimeout(() => {
-      const move = getBestMove(snapshot, depth);
+      const move = getBestMove(snapshot, difficulty);
       if (move) {
         historyStackRef.current = [...historyStackRef.current, snapshot];
         const next = applyMove(snapshot, move.from, move.to, move.promotion);
@@ -939,12 +974,19 @@ export default function App() {
         setLastMove({ from: move.from, to: move.to });
       }
       setEngineThinking(false);
-    }, 500);
+    }, 0);
 
     return () => {
       if (engineTimerRef.current) clearTimeout(engineTimerRef.current);
     };
-  }, [gameState, opponentMode, difficulty, isGameOver, engineThinking]);
+  }, [
+    gameState,
+    opponentMode,
+    difficulty,
+    isGameOver,
+    engineThinking,
+    isPaused,
+  ]);
 
   const handleOpponentChange = useCallback(
     (mode: "human" | "engine", d: number) => {
@@ -1030,6 +1072,7 @@ export default function App() {
       engineTimerRef.current = null;
     }
     setEngineThinking(false);
+    setIsPaused(false);
     setGameState(createInitialGameState());
     setLastMove(undefined);
     setPrePromotionState(null);
@@ -1105,6 +1148,10 @@ export default function App() {
     }
   }, []);
 
+  const handleTogglePause = useCallback(() => {
+    setIsPaused((prev) => !prev);
+  }, []);
+
   const promotionColor: PieceColor = gameState.promotionPending
     ? gameState.currentTurn
     : "White";
@@ -1123,7 +1170,7 @@ export default function App() {
             onThemeSelect={setActiveThemeId}
             duration={duration}
             onDurationSelect={setDuration}
-            durationLocked={durationLocked}
+            settingsLocked={settingsLocked}
             whitePlayerName={whitePlayerName}
             blackPlayerName={blackPlayerName}
             onWhiteNameChange={setWhitePlayerName}
@@ -1132,6 +1179,7 @@ export default function App() {
             onResetCounters={resetCounters}
             bgColor={bgColor}
             onBgColorChange={setBgColor}
+            isPaused={isPaused}
           />
         }
         board={
@@ -1140,6 +1188,7 @@ export default function App() {
             onSquareClick={handleSquareClick}
             lastMove={lastMove}
             engineThinking={engineThinking}
+            isPaused={isPaused}
           />
         }
         sidebar={
@@ -1154,6 +1203,7 @@ export default function App() {
             opponentMode={opponentMode}
             difficulty={difficulty}
             onOpponentChange={handleOpponentChange}
+            settingsLocked={settingsLocked}
           />
         }
         moveList={<MoveHistory gameState={gameState} />}
@@ -1198,6 +1248,8 @@ export default function App() {
               onClaimDraw={handleClaimDraw}
               onUndo={handleUndo}
               drawOffer={drawOffer}
+              isPaused={isPaused}
+              onTogglePause={handleTogglePause}
             />
           )
         }

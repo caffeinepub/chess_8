@@ -66,4 +66,5 @@ export interface GameState {
   selectedSquare: Position | null;
   legalMovesForSelected: Position[];
   promotionPending: Position | null;
+  isPaused?: boolean;
 }

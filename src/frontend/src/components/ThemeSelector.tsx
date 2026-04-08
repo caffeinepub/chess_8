@@ -94,11 +94,19 @@ export function useChessTheme() {
 interface ThemeSelectorProps {
   activeThemeId: string;
   onSelect: (id: string) => void;
+  disabled?: boolean;
 }
 
-export function ThemeSelector({ activeThemeId, onSelect }: ThemeSelectorProps) {
+export function ThemeSelector({
+  activeThemeId,
+  onSelect,
+  disabled = false,
+}: ThemeSelectorProps) {
   return (
-    <div className="flex items-center gap-2" data-ocid="theme-selector">
+    <div
+      className={`flex items-center gap-2 ${disabled ? "opacity-50" : ""}`}
+      data-ocid="theme-selector"
+    >
       <span className="text-xs font-display font-semibold text-muted-foreground tracking-widest uppercase hidden sm:block">
         Board
       </span>
@@ -110,12 +118,15 @@ export function ThemeSelector({ activeThemeId, onSelect }: ThemeSelectorProps) {
             title={theme.label}
             aria-label={`${theme.label} board theme`}
             aria-pressed={activeThemeId === theme.id}
-            onClick={() => onSelect(theme.id)}
+            disabled={disabled}
+            onClick={() => !disabled && onSelect(theme.id)}
             data-ocid={`theme-${theme.id}`}
             className={`relative w-7 h-7 rounded-md overflow-hidden flex-shrink-0 transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-              activeThemeId === theme.id
-                ? "ring-2 ring-offset-1 ring-offset-card ring-primary scale-110"
-                : "hover:scale-105 ring-1 ring-border/40"
+              disabled
+                ? "cursor-not-allowed ring-1 ring-border/40"
+                : activeThemeId === theme.id
+                  ? "ring-2 ring-offset-1 ring-offset-card ring-primary scale-110 cursor-pointer"
+                  : "hover:scale-105 ring-1 ring-border/40 cursor-pointer"
             }`}
           >
             {/* 2×2 mini checkerboard swatch */}
