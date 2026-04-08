@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
 import { Layout, StatusBadge } from "./Layout";
 import { AnalogClock } from "./components/AnalogClock";
+import { ChessBoard } from "./components/ChessBoard";
 import {
   ClockStyleSelector,
   useClockStyle,
@@ -134,6 +135,26 @@ function useBackgroundColor() {
   }, [bgColor]);
 
   return { bgColor, setBgColor };
+}
+
+// ─── Board Flip ───────────────────────────────────────────────────────────────
+
+const FLIP_BOARD_KEY = "chess-board-flipped";
+
+function useFlipBoard() {
+  const [isFlipped, setIsFlipped] = useState<boolean>(() => {
+    return localStorage.getItem(FLIP_BOARD_KEY) === "true";
+  });
+
+  const toggleFlip = useCallback(() => {
+    setIsFlipped((prev) => {
+      const next = !prev;
+      localStorage.setItem(FLIP_BOARD_KEY, String(next));
+      return next;
+    });
+  }, []);
+
+  return { isFlipped, toggleFlip };
 }
 
 // ─── End-of-Game Feedback (flash + sound) ─────────────────────────────────────
@@ -261,146 +282,6 @@ function useClock(
   }, []);
 
   return { whiteTime, blackTime, resetClocks };
-}
-
-// ─── Board Component ──────────────────────────────────────────────────────────
-
-const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
-
-interface BoardProps {
-  gameState: GameState;
-  onSquareClick: (pos: Position) => void;
-  lastMove?: { from: Position; to: Position };
-  engineThinking: boolean;
-  isPaused: boolean;
-}
-
-function ChessBoard({
-  gameState,
-  onSquareClick,
-  lastMove,
-  engineThinking,
-  isPaused,
-}: BoardProps) {
-  const { board, selectedSquare, legalMovesForSelected, currentTurn, status } =
-    gameState;
-
-  const rows = [7, 6, 5, 4, 3, 2, 1, 0];
-  const cols = [0, 1, 2, 3, 4, 5, 6, 7];
-
-  const isLegalTarget = (row: number, col: number) =>
-    legalMovesForSelected.some((m) => m.row === row && m.col === col);
-
-  const isSelected = (row: number, col: number) =>
-    selectedSquare?.row === row && selectedSquare?.col === col;
-
-  const isLastMove = (row: number, col: number) =>
-    lastMove &&
-    ((lastMove.from.row === row && lastMove.from.col === col) ||
-      (lastMove.to.row === row && lastMove.to.col === col));
-
-  const isKingInCheck = (row: number, col: number) => {
-    const piece = board[row][col];
-    if (!piece || piece.type !== "King") return false;
-    if (status !== "check" && status !== "checkmate") return false;
-    return piece.color === currentTurn;
-  };
-
-  const isDisabled =
-    (status !== "playing" && status !== "check") || engineThinking || isPaused;
-
-  return (
-    <div className="flex flex-col items-center select-none">
-      <div className="flex">
-        <div className="flex flex-col justify-around mr-1 pb-6">
-          {rows.map((row) => (
-            <span
-              key={row}
-              className="text-xs text-muted-foreground w-4 text-center font-mono leading-none"
-              style={{ height: "var(--sq, 62px)" }}
-            >
-              {row + 1}
-            </span>
-          ))}
-        </div>
-
-        <div>
-          <div
-            className={`grid shadow-board rounded-sm overflow-hidden border border-border/30 transition-opacity duration-300 ${engineThinking ? "opacity-80" : ""}`}
-            style={
-              {
-                gridTemplateColumns: "repeat(8, var(--sq, 62px))",
-                gridTemplateRows: "repeat(8, var(--sq, 62px))",
-              } as React.CSSProperties
-            }
-            data-ocid="chess-board"
-          >
-            {rows.map((row) =>
-              cols.map((col) => {
-                const piece = board[row][col];
-                const isLight = (row + col) % 2 === 0;
-                const legal = isLegalTarget(row, col);
-                const selected = isSelected(row, col);
-                const lastMv = isLastMove(row, col);
-                const inCheck = isKingInCheck(row, col);
-                const hasCapturablePiece = legal && !!piece;
-
-                const baseClass = isLight
-                  ? "board-square-light"
-                  : "board-square-dark";
-                const overlayClasses = [
-                  selected
-                    ? "board-square-selected"
-                    : lastMv
-                      ? "board-square-last-move"
-                      : "",
-                  inCheck ? "board-square-check" : "",
-                  legal && !hasCapturablePiece ? "board-square-legal" : "",
-                  hasCapturablePiece ? "board-square-legal-capture" : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ");
-
-                const squareClass = `${baseClass} ${overlayClasses}`.trim();
-
-                return (
-                  <button
-                    type="button"
-                    key={`${row}-${col}`}
-                    className={`relative flex items-center justify-center transition-all duration-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${squareClass} ${isDisabled ? "cursor-default" : "cursor-pointer"}`}
-                    onClick={() => !isDisabled && onSquareClick({ row, col })}
-                    aria-label={`${FILES[col]}${row + 1}${piece ? ` ${piece.color} ${piece.type}` : ""}`}
-                    data-ocid={`sq-${FILES[col]}${row + 1}`}
-                  >
-                    {piece && (
-                      <span
-                        className={`leading-none select-none z-20 relative transition-transform duration-100 ${selected ? "scale-110" : "hover:scale-105"} ${piece.color === "White" ? "piece-white" : "piece-black"}`}
-                        style={{ fontSize: "calc(var(--sq, 62px) * 0.72)" }}
-                      >
-                        {getPieceSymbol(piece)}
-                      </span>
-                    )}
-                  </button>
-                );
-              }),
-            )}
-          </div>
-
-          <div className="flex mt-1">
-            {cols.map((col) => (
-              <span
-                key={col}
-                className="text-xs text-muted-foreground text-center font-mono"
-                style={{ width: "var(--sq, 62px)" }}
-              >
-                {FILES[col]}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 // ─── Promotion Dialog ─────────────────────────────────────────────────────────
@@ -567,9 +448,13 @@ interface SidebarProps {
   settingsLocked: boolean;
   clockStyle: ClockStyle;
   onClockStyleChange: (style: ClockStyle) => void;
+  isFlipped: boolean;
 }
 
-const CLOCK_COLORS: PieceColor[] = ["Black", "White"];
+// When flipped, Black is at the bottom — show Black clock first (top) → no, show in
+// board-matching order: top player first, bottom player second.
+// Default (not flipped): White at bottom → show Black on top, White on bottom.
+// Flipped: Black at bottom → show White on top, Black on bottom.
 
 function Sidebar({
   gameState,
@@ -585,6 +470,7 @@ function Sidebar({
   settingsLocked,
   clockStyle,
   onClockStyleChange,
+  isFlipped,
 }: SidebarProps) {
   const { capturedByWhite, capturedByBlack, currentTurn, status } = gameState;
   const isPlaying = status === "playing" || status === "check";
@@ -592,11 +478,16 @@ function Sidebar({
   const playerName = (color: PieceColor) =>
     color === "White" ? whitePlayerName : blackPlayerName;
 
+  // Top-to-bottom order: opponent (far side) first, current player second
+  const clockColors: PieceColor[] = isFlipped
+    ? ["White", "Black"]
+    : ["Black", "White"];
+
   return (
     <div className="flex flex-col h-full p-4 gap-4 overflow-y-auto">
       {isTimed && (
         <div className="grid grid-cols-1 gap-3">
-          {CLOCK_COLORS.map((color) => {
+          {clockColors.map((color) => {
             const isActive = isPlaying && currentTurn === color;
             const time = color === "White" ? whiteTime : blackTime;
             const isLow = time < 60;
@@ -638,7 +529,7 @@ function Sidebar({
 
       {!isTimed && (
         <div className="grid grid-cols-1 gap-3">
-          {CLOCK_COLORS.map((color) => {
+          {clockColors.map((color) => {
             const isActive = isPlaying && currentTurn === color;
             return (
               <div
@@ -935,6 +826,7 @@ export default function App() {
   const { opponentMode, setOpponentMode, difficulty, setDifficulty } =
     useOpponentMode();
   const { clockStyle, setClockStyle } = useClockStyle();
+  const { isFlipped, toggleFlip } = useFlipBoard();
 
   const initialTime = durationToSeconds(duration);
   const isTimed = duration !== null;
@@ -1220,15 +1112,47 @@ export default function App() {
             isPaused={isPaused}
           />
         }
-        board={
-          <ChessBoard
-            gameState={gameState}
-            onSquareClick={handleSquareClick}
-            lastMove={lastMove}
-            engineThinking={engineThinking}
-            isPaused={isPaused}
-          />
-        }
+        board={(() => {
+          const {
+            board,
+            selectedSquare,
+            legalMovesForSelected,
+            currentTurn,
+            status,
+          } = gameState;
+          const isDisabled =
+            (status !== "playing" && status !== "check") ||
+            engineThinking ||
+            isPaused;
+          // Find the king position if in check/checkmate
+          let checkKingPos: Position | null = null;
+          if (status === "check" || status === "checkmate") {
+            outer: for (let r = 0; r < 8; r++) {
+              for (let c = 0; c < 8; c++) {
+                const p = board[r][c];
+                if (p?.type === "King" && p.color === currentTurn) {
+                  checkKingPos = { row: r, col: c };
+                  break outer;
+                }
+              }
+            }
+          }
+          const lastMoveForBoard = lastMove ?? null;
+          return (
+            <ChessBoard
+              board={board}
+              selectedSquare={selectedSquare}
+              validMoveTargets={legalMovesForSelected}
+              lastMove={lastMoveForBoard as import("./types/chess").Move | null}
+              isInCheck={status === "check" || status === "checkmate"}
+              checkKingPosition={checkKingPos}
+              onSquareClick={handleSquareClick}
+              isFlipped={isFlipped}
+              isDisabled={isDisabled}
+              engineThinking={engineThinking}
+            />
+          );
+        })()}
         sidebar={
           <Sidebar
             gameState={gameState}
@@ -1244,6 +1168,7 @@ export default function App() {
             settingsLocked={settingsLocked}
             clockStyle={clockStyle}
             onClockStyleChange={setClockStyle}
+            isFlipped={isFlipped}
           />
         }
         moveList={<MoveHistory gameState={gameState} />}
@@ -1290,6 +1215,8 @@ export default function App() {
               drawOffer={drawOffer}
               isPaused={isPaused}
               onTogglePause={handleTogglePause}
+              isFlipped={isFlipped}
+              onFlipBoard={toggleFlip}
             />
           )
         }

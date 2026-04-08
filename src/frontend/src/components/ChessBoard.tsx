@@ -7,12 +7,15 @@ import type React from "react";
 export interface ChessBoardProps {
   board: BoardState;
   selectedSquare: Position | null;
-  validMoves: Move[];
+  /** Positions the selected piece can legally move to */
+  validMoveTargets: Position[];
   lastMove: Move | null;
   isInCheck: boolean;
   checkKingPosition: Position | null;
   onSquareClick: (pos: Position) => void;
   isFlipped: boolean;
+  isDisabled?: boolean;
+  engineThinking?: boolean;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -32,11 +35,12 @@ interface SquareCellProps {
   col: number;
   board: BoardState;
   selectedSquare: Position | null;
-  validMoves: Move[];
+  validMoveTargets: Position[];
   lastMove: Move | null;
   isInCheck: boolean;
   checkKingPosition: Position | null;
   onSquareClick: (pos: Position) => void;
+  isDisabled: boolean;
 }
 
 function SquareCell({
@@ -44,21 +48,21 @@ function SquareCell({
   col,
   board,
   selectedSquare,
-  validMoves,
+  validMoveTargets,
   lastMove,
   isInCheck,
   checkKingPosition,
   onSquareClick,
+  isDisabled,
 }: SquareCellProps) {
   const piece = board[row][col];
   const isLight = (row + col) % 2 === 0;
 
   const isSelected = posEq(selectedSquare, { row, col });
 
-  const legalMove = validMoves.find(
-    (m) => m.to.row === row && m.to.col === col,
+  const isLegalTarget = validMoveTargets.some(
+    (p) => p.row === row && p.col === col,
   );
-  const isLegalTarget = !!legalMove;
   const hasCapturablePiece = isLegalTarget && !!piece;
 
   const isLastMoveFrom = lastMove ? posEq(lastMove.from, { row, col }) : false;
@@ -93,7 +97,7 @@ function SquareCell({
   return (
     <button
       type="button"
-      className={`relative flex items-center justify-center cursor-pointer transition-all duration-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${squareClass}`}
+      className={`relative flex items-center justify-center transition-all duration-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${squareClass} ${isDisabled ? "cursor-default" : "cursor-pointer"}`}
       onClick={() => onSquareClick({ row, col })}
       aria-label={`${FILES[col]}${row + 1}${piece ? ` ${piece.color} ${piece.type}` : ""}`}
       data-ocid={`sq-${FILES[col]}${row + 1}`}
@@ -123,16 +127,22 @@ function SquareCell({
 export function ChessBoard({
   board,
   selectedSquare,
-  validMoves,
+  validMoveTargets,
   lastMove,
   isInCheck,
   checkKingPosition,
   onSquareClick,
   isFlipped,
+  isDisabled = false,
+  engineThinking = false,
 }: ChessBoardProps) {
   // Determine row/col render order based on flip state
   const rows = isFlipped ? [0, 1, 2, 3, 4, 5, 6, 7] : [7, 6, 5, 4, 3, 2, 1, 0];
   const cols = isFlipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
+
+  const handleSquareClick = (pos: Position) => {
+    if (!isDisabled) onSquareClick(pos);
+  };
 
   return (
     <div className="flex flex-col items-center select-none">
@@ -153,7 +163,7 @@ export function ChessBoard({
         <div>
           {/* Board grid */}
           <div
-            className="grid shadow-board rounded-sm overflow-hidden border border-border/30"
+            className={`grid shadow-board rounded-sm overflow-hidden border border-border/30 transition-opacity duration-300 ${engineThinking ? "opacity-80" : ""}`}
             style={
               {
                 gridTemplateColumns: "repeat(8, var(--sq, 62px))",
@@ -170,11 +180,12 @@ export function ChessBoard({
                   col={col}
                   board={board}
                   selectedSquare={selectedSquare}
-                  validMoves={validMoves}
+                  validMoveTargets={validMoveTargets}
                   lastMove={lastMove}
                   isInCheck={isInCheck}
                   checkKingPosition={checkKingPosition}
-                  onSquareClick={onSquareClick}
+                  onSquareClick={handleSquareClick}
+                  isDisabled={isDisabled}
                 />
               )),
             )}

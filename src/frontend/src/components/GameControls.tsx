@@ -1,6 +1,14 @@
 import { Button } from "@/components/ui/button";
 import type { GameState } from "@/types/chess";
-import { Flag, Handshake, Pause, Play, RotateCcw, Undo2 } from "lucide-react";
+import {
+  Flag,
+  FlipVertical2,
+  Handshake,
+  Pause,
+  Play,
+  RotateCcw,
+  Undo2,
+} from "lucide-react";
 
 interface GameControlsProps {
   gameState: GameState;
@@ -12,6 +20,8 @@ interface GameControlsProps {
   drawOffer?: "White" | "Black" | null;
   isPaused: boolean;
   onTogglePause: () => void;
+  isFlipped: boolean;
+  onFlipBoard: () => void;
 }
 
 export function GameControls({
@@ -24,6 +34,8 @@ export function GameControls({
   drawOffer,
   isPaused,
   onTogglePause,
+  isFlipped,
+  onFlipBoard,
 }: GameControlsProps) {
   const isGameOver =
     gameState.status !== "playing" && gameState.status !== "check";
@@ -47,7 +59,7 @@ export function GameControls({
       className="flex items-center justify-between px-4 py-3 gap-2 flex-wrap"
       data-ocid="game-controls"
     >
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         {/* Pause / Resume — prominent, not destructive */}
         <Button
           variant={isPaused ? "default" : "outline"}
@@ -118,6 +130,26 @@ export function GameControls({
         >
           <Undo2 className="w-3.5 h-3.5" />
           Undo
+        </Button>
+
+        {/* Flip board — display preference, never disabled */}
+        <Button
+          variant={isFlipped ? "secondary" : "ghost"}
+          size="sm"
+          onClick={onFlipBoard}
+          className="gap-1.5 font-display text-xs text-muted-foreground hover:text-foreground"
+          data-ocid="btn-flip-board"
+          aria-label={
+            isFlipped ? "View from White's side" : "View from Black's side"
+          }
+          title={
+            isFlipped
+              ? "Flip: view from White's side"
+              : "Flip: view from Black's side"
+          }
+        >
+          <FlipVertical2 className="w-3.5 h-3.5" />
+          Flip
         </Button>
       </div>
 
