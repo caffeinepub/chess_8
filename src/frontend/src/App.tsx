@@ -10,6 +10,12 @@ import { Crown, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
 import { Layout, StatusBadge } from "./Layout";
+import { AnalogClock } from "./components/AnalogClock";
+import {
+  ClockStyleSelector,
+  useClockStyle,
+} from "./components/ClockStyleSelector";
+import type { ClockStyle } from "./components/ClockStyleSelector";
 import {
   DurationSelector,
   useGameDuration,
@@ -559,6 +565,8 @@ interface SidebarProps {
   difficulty: number;
   onOpponentChange: (mode: "human" | "engine", d: number) => void;
   settingsLocked: boolean;
+  clockStyle: ClockStyle;
+  onClockStyleChange: (style: ClockStyle) => void;
 }
 
 const CLOCK_COLORS: PieceColor[] = ["Black", "White"];
@@ -575,6 +583,8 @@ function Sidebar({
   difficulty,
   onOpponentChange,
   settingsLocked,
+  clockStyle,
+  onClockStyleChange,
 }: SidebarProps) {
   const { capturedByWhite, capturedByBlack, currentTurn, status } = gameState;
   const isPlaying = status === "playing" || status === "check";
@@ -604,11 +614,22 @@ function Sidebar({
                     <span className="w-2 h-2 rounded-full bg-primary turn-indicator flex-shrink-0" />
                   )}
                 </div>
-                <span
-                  className={`font-display font-bold text-2xl tabular-nums tracking-tight ${isLow && isActive ? "text-destructive" : "text-foreground"}`}
-                >
-                  {formatTime(time)}
-                </span>
+                {clockStyle === "analogue" ? (
+                  <div className="flex justify-center mt-1">
+                    <AnalogClock
+                      seconds={time}
+                      size={80}
+                      isLow={isLow}
+                      isActive={isActive}
+                    />
+                  </div>
+                ) : (
+                  <span
+                    className={`font-display font-bold text-2xl tabular-nums tracking-tight ${isLow && isActive ? "text-destructive" : "text-foreground"}`}
+                  >
+                    {formatTime(time)}
+                  </span>
+                )}
               </div>
             );
           })}
@@ -658,6 +679,22 @@ function Sidebar({
       </div>
 
       <Separator />
+
+      {/* Clock style selector — only shown when game is timed */}
+      {isTimed && (
+        <div>
+          <h3 className="text-xs font-display font-semibold text-muted-foreground tracking-widest uppercase mb-2">
+            Clock Style
+          </h3>
+          <ClockStyleSelector
+            clockStyle={clockStyle}
+            onSelect={onClockStyleChange}
+            disabled={settingsLocked}
+          />
+        </div>
+      )}
+
+      {isTimed && <Separator />}
 
       <div>
         <h3 className="text-xs font-display font-semibold text-muted-foreground tracking-widest uppercase mb-2">
@@ -897,6 +934,7 @@ export default function App() {
   const { bgColor, setBgColor } = useBackgroundColor();
   const { opponentMode, setOpponentMode, difficulty, setDifficulty } =
     useOpponentMode();
+  const { clockStyle, setClockStyle } = useClockStyle();
 
   const initialTime = durationToSeconds(duration);
   const isTimed = duration !== null;
@@ -1204,6 +1242,8 @@ export default function App() {
             difficulty={difficulty}
             onOpponentChange={handleOpponentChange}
             settingsLocked={settingsLocked}
+            clockStyle={clockStyle}
+            onClockStyleChange={setClockStyle}
           />
         }
         moveList={<MoveHistory gameState={gameState} />}
