@@ -30,6 +30,7 @@ import {
   useOpponentMode,
 } from "./components/OpponentSelector";
 import { PlayerNameInput } from "./components/PlayerNameInput";
+import { RulesPane } from "./components/RulesPane";
 import { ThemeSelector, useChessTheme } from "./components/ThemeSelector";
 import {
   applyMove,
@@ -1171,6 +1172,7 @@ export default function App() {
             isFlipped={isFlipped}
           />
         }
+        rulesPane={<RulesPane />}
         moveList={<MoveHistory gameState={gameState} />}
         controls={
           drawOfferForCurrentPlayer ? (

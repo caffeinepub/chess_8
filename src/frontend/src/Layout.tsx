@@ -8,6 +8,7 @@ interface LayoutProps {
   sidebar: React.ReactNode;
   moveList: React.ReactNode;
   controls: React.ReactNode;
+  rulesPane?: React.ReactNode;
 }
 
 export function Layout({
@@ -16,6 +17,7 @@ export function Layout({
   sidebar,
   moveList,
   controls,
+  rulesPane,
 }: LayoutProps) {
   return (
     <div className="min-h-screen flex flex-col">
@@ -26,6 +28,16 @@ export function Layout({
 
       {/* Main content */}
       <main className="flex-1 flex flex-col lg:flex-row gap-0 overflow-hidden min-h-0">
+        {/* Rules pane — leftmost column on desktop */}
+        {rulesPane && (
+          <div
+            className="hidden lg:flex flex-shrink-0 overflow-hidden order-0"
+            style={{ height: "100%" }}
+          >
+            {rulesPane}
+          </div>
+        )}
+
         {/* Move list — left sidebar on desktop */}
         <aside className="w-full lg:w-56 xl:w-64 bg-card border-b lg:border-b-0 lg:border-r border-border flex-shrink-0 overflow-hidden flex flex-col order-2 lg:order-1">
           {moveList}
@@ -40,6 +52,13 @@ export function Layout({
         <aside className="w-full lg:w-64 xl:w-72 bg-card border-t lg:border-t-0 lg:border-l border-border flex-shrink-0 flex flex-col order-3">
           {sidebar}
         </aside>
+
+        {/* Rules pane — mobile: stacked below board */}
+        {rulesPane && (
+          <div className="lg:hidden w-full border-t border-border order-4">
+            <MobileRulesSection>{rulesPane}</MobileRulesSection>
+          </div>
+        )}
       </main>
 
       {/* Bottom controls */}
@@ -58,6 +77,11 @@ export function Layout({
       </footer>
     </div>
   );
+}
+
+// Simple wrapper for mobile rules display — just shows content inline
+function MobileRulesSection({ children }: { children: React.ReactNode }) {
+  return <div className="w-full">{children}</div>;
 }
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
