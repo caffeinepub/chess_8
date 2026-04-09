@@ -6,6 +6,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
+import { format } from "date-fns";
 import { Crown, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
@@ -156,6 +157,38 @@ function useFlipBoard() {
   }, []);
 
   return { isFlipped, toggleFlip };
+}
+
+// ─── Live Date / Time ────────────────────────────────────────────────────────
+
+function useLiveDateTime() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
+function LiveDateTime() {
+  const now = useLiveDateTime();
+  const datePart = format(now, "EEEE d MMMM yyyy");
+  const timePart = format(now, "HH:mm:ss");
+  return (
+    <div
+      className="flex flex-col items-center leading-tight select-none pointer-events-none"
+      data-ocid="live-datetime"
+      aria-live="off"
+      aria-label={`Current date and time: ${datePart} ${timePart}`}
+    >
+      <span className="text-xs font-display font-medium text-muted-foreground tracking-wide">
+        {datePart}
+      </span>
+      <span className="text-sm font-display font-bold tabular-nums text-foreground tracking-widest">
+        {timePart}
+      </span>
+    </div>
+  );
 }
 
 // ─── End-of-Game Feedback (flash + sound) ─────────────────────────────────────
@@ -671,8 +704,13 @@ function Header({
   isPaused,
 }: HeaderProps) {
   return (
-    <div className="flex items-center justify-between px-4 py-2.5 gap-2 flex-wrap">
-      <div className="flex items-center gap-2 flex-shrink-0">
+    <div className="relative flex items-center justify-between px-4 py-2.5 gap-2 flex-wrap">
+      {/* Live date/time — absolutely centred */}
+      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-0 hidden sm:flex">
+        <LiveDateTime />
+      </div>
+
+      <div className="flex items-center gap-2 flex-shrink-0 z-10">
         <Crown className="w-5 h-5 text-secondary" />
         <span className="font-display font-bold text-base tracking-tight text-foreground hidden md:block">
           Harry Chess
@@ -680,7 +718,7 @@ function Header({
       </div>
 
       {/* Player name inputs */}
-      <div className="flex items-center gap-3 min-w-0">
+      <div className="flex items-center gap-3 min-w-0 z-10">
         <PlayerNameInput
           color="white"
           value={whitePlayerName}
@@ -699,14 +737,16 @@ function Header({
       </div>
 
       {/* Win counters */}
-      <WinCountersDisplay
-        counters={counters}
-        whitePlayerName={whitePlayerName}
-        blackPlayerName={blackPlayerName}
-        onReset={onResetCounters}
-      />
+      <div className="z-10">
+        <WinCountersDisplay
+          counters={counters}
+          whitePlayerName={whitePlayerName}
+          blackPlayerName={blackPlayerName}
+          onReset={onResetCounters}
+        />
+      </div>
 
-      <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex items-center gap-3 flex-wrap z-10">
         <DurationSelector
           duration={duration}
           onSelect={onDurationSelect}
@@ -724,12 +764,14 @@ function Header({
         />
       </div>
 
-      <StatusBadge
-        status={gameState.status}
-        currentTurn={gameState.currentTurn}
-        winner={gameState.winner}
-        isPaused={isPaused}
-      />
+      <div className="z-10">
+        <StatusBadge
+          status={gameState.status}
+          currentTurn={gameState.currentTurn}
+          winner={gameState.winner}
+          isPaused={isPaused}
+        />
+      </div>
     </div>
   );
 }
