@@ -1,15 +1,16 @@
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { BookOpen, ChevronLeft, ChevronRight } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 
 const STORAGE_KEY = "chess-rules-pane-visible";
+const OPEN_SECTION_KEY = "chess-rules-open-section";
 
 interface RuleSection {
   title: string;
   content: string[];
 }
 
-const RULES: RuleSection[] = [
+export const RULES: RuleSection[] = [
   {
     title: "Objective",
     content: [
@@ -75,6 +76,49 @@ const RULES: RuleSection[] = [
   },
 ];
 
+interface AccordionSectionProps {
+  section: RuleSection;
+  isOpen: boolean;
+  onToggle: () => void;
+}
+
+function AccordionSection({
+  section,
+  isOpen,
+  onToggle,
+}: AccordionSectionProps) {
+  return (
+    <div className="border-b border-border/40 last:border-b-0">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-muted/50 transition-colors group"
+        aria-expanded={isOpen}
+        data-ocid={`rules-section-${section.title.toLowerCase().replace(/\s+/g, "-")}`}
+      >
+        <span className="font-display font-semibold text-[11px] uppercase tracking-widest text-primary group-hover:text-primary/80 transition-colors">
+          {section.title}
+        </span>
+        <ChevronDown
+          className={`w-3 h-3 text-muted-foreground flex-shrink-0 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+        />
+      </button>
+      {isOpen && (
+        <ul className="px-3 pb-3 pt-1 space-y-1.5">
+          {section.content.map((line) => (
+            <li
+              key={line.slice(0, 40)}
+              className="text-[11px] leading-relaxed text-muted-foreground"
+            >
+              {line}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export function RulesPane() {
   const [visible, setVisible] = useState<boolean>(() => {
     try {
@@ -85,6 +129,14 @@ export function RulesPane() {
     }
   });
 
+  const [openSection, setOpenSection] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(OPEN_SECTION_KEY) ?? RULES[0].title;
+    } catch {
+      return RULES[0].title;
+    }
+  });
+
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, String(visible));
@@ -92,6 +144,22 @@ export function RulesPane() {
       // ignore
     }
   }, [visible]);
+
+  useEffect(() => {
+    try {
+      if (openSection) {
+        localStorage.setItem(OPEN_SECTION_KEY, openSection);
+      } else {
+        localStorage.removeItem(OPEN_SECTION_KEY);
+      }
+    } catch {
+      // ignore
+    }
+  }, [openSection]);
+
+  const handleToggleSection = (title: string) => {
+    setOpenSection((prev) => (prev === title ? null : title));
+  };
 
   return (
     <div className="relative flex h-full">
@@ -117,25 +185,16 @@ export function RulesPane() {
             </button>
           </div>
 
-          {/* Scrollable rules content */}
+          {/* Scrollable accordion sections */}
           <ScrollArea className="flex-1 min-h-0">
-            <div className="px-3 py-3 space-y-4">
+            <div className="py-1">
               {RULES.map((section) => (
-                <div key={section.title}>
-                  <h3 className="font-display font-semibold text-[11px] uppercase tracking-widest text-primary mb-1.5">
-                    {section.title}
-                  </h3>
-                  <ul className="space-y-1.5">
-                    {section.content.map((line) => (
-                      <li
-                        key={line.slice(0, 40)}
-                        className="text-[11px] leading-relaxed text-muted-foreground"
-                      >
-                        {line}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                <AccordionSection
+                  key={section.title}
+                  section={section}
+                  isOpen={openSection === section.title}
+                  onToggle={() => handleToggleSection(section.title)}
+                />
               ))}
             </div>
           </ScrollArea>

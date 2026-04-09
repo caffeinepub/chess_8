@@ -1,4 +1,7 @@
+import { Separator } from "@/components/ui/separator";
 import type React from "react";
+import { NewsPane } from "./components/NewsPane";
+import { YoutubePane } from "./components/YoutubePane";
 import type { GameState, PieceColor } from "./types/chess";
 
 interface LayoutProps {
@@ -48,9 +51,13 @@ export function Layout({
           {board}
         </div>
 
-        {/* Right sidebar — clocks, captures, chat */}
-        <aside className="w-full lg:w-64 xl:w-72 bg-card border-t lg:border-t-0 lg:border-l border-border flex-shrink-0 flex flex-col order-3">
+        {/* Right sidebar — clocks, captures, youtube, news */}
+        <aside className="w-full lg:w-64 xl:w-72 bg-card border-t lg:border-t-0 lg:border-l border-border flex-shrink-0 flex flex-col order-3 overflow-y-auto">
           {sidebar}
+          <Separator />
+          <YoutubePane />
+          <Separator />
+          <NewsPane />
         </aside>
 
         {/* Rules pane — mobile: stacked below board */}

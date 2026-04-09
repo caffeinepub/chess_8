@@ -675,7 +675,7 @@ function Header({
       <div className="flex items-center gap-2 flex-shrink-0">
         <Crown className="w-5 h-5 text-secondary" />
         <span className="font-display font-bold text-base tracking-tight text-foreground hidden md:block">
-          Grandmaster Chess
+          Harry Chess
         </span>
       </div>
 
